@@ -1,0 +1,17 @@
+[build]
+  publish = "dist"
+  command = "npm run build"
+
+# SPA fallback — must be last
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Proxy API calls to Railway backend
+# REPLACE your-railway-app.up.railway.app with your actual Railway URL after deploying
+[[redirects]]
+  from = "/api/*"
+  to = "https://your-railway-app.up.railway.app/api/:splat"
+  status = 200
+  force = true

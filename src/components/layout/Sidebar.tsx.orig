@@ -1,0 +1,150 @@
+﻿import React from 'react';
+import { useAuth } from '../../context/AuthContext';
+import { UserRole } from '../../types';
+import {
+  LayoutDashboard,
+  BedDouble,
+  CalendarCheck,
+  Users,
+  Boxes,
+  UtensilsCrossed,
+  ConciergeBell,
+  Receipt,
+  ChefHat,
+  Sparkles,
+  DollarSign,
+  BarChart3,
+  ShieldCheck,
+  Database,
+  ClipboardList,
+  FileSpreadsheet,
+} from 'lucide-react';
+
+export type NavView =
+  | 'dashboard'
+  | 'waiter-dashboard'
+  | 'rooms'
+  | 'reservations'
+  | 'guests'
+  | 'inventory'
+  | 'menu'
+  | 'pos'
+  | 'orders'
+  | 'kitchen-orders'
+  | 'housekeeping'
+  | 'finance'
+  | 'reports'
+  | 'users'
+  | 'audit-logs'
+  | 'database';
+
+interface NavItem {
+  id: NavView;
+  label: string;
+  icon: any;
+  roles: UserRole[];
+  badge?: string;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'chef', 'housekeeper', 'waiter'] },
+  
+  // Front Desk & Rooms
+  { id: 'rooms', label: 'Rooms & Front Desk', icon: BedDouble, roles: ['admin', 'manager'] },
+  { id: 'reservations', label: 'Reservations', icon: CalendarCheck, roles: ['admin', 'manager'] },
+  { id: 'guests', label: 'Guest Directory', icon: Users, roles: ['admin', 'manager'] },
+
+  // Food & Beverage / POS
+  { id: 'pos', label: 'Waiter POS', icon: ConciergeBell, roles: ['admin', 'waiter', 'manager'] },
+  { id: 'orders', label: 'Orders Queue', icon: Receipt, roles: ['admin', 'manager', 'waiter'] },
+  { id: 'kitchen-orders', label: 'Kitchen Orders', icon: ChefHat, roles: ['admin', 'manager', 'chef'] },
+  { id: 'menu', label: 'Menu & Recipes', icon: UtensilsCrossed, roles: ['admin', 'manager', 'chef'] },
+
+  // Inventory & Housekeeping
+  { id: 'inventory', label: 'Central Inventory', icon: Boxes, roles: ['admin', 'manager', 'chef', 'waiter', 'housekeeper'] },
+  { id: 'housekeeping', label: 'Housekeeping', icon: Sparkles, roles: ['admin', 'manager', 'housekeeper'] },
+
+  // Finance & Reporting
+  { id: 'finance', label: 'Finance & Invoicing', icon: DollarSign, roles: ['admin', 'manager'] },
+  { id: 'reports', label: 'Reports & Analytics', icon: BarChart3, roles: ['admin', 'manager'] },
+
+  // Administration & Technical
+  { id: 'users', label: 'User Accounts', icon: ShieldCheck, roles: ['admin'] },
+  { id: 'audit-logs', label: 'Audit Trail', icon: ClipboardList, roles: ['admin'] },
+  { id: 'database', label: 'MySQL Schema & DDL', icon: Database, roles: ['admin'] },
+};
+
+interface SidebarProps {
+  currentView: NavView;
+  onSelectView: (view: NavView) => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView }) => {
+  const { user } = useAuth();
+  const currentRole = user?.role || 'admin';
+
+  const visibleItems = NAV_ITEMS.filter((item) => item.roles.includes(currentRole));
+
+  return (
+    <aside className="w-64 fixed left-0 top-0 bottom-0 border-r border-slate-800 bg-slate-900 flex flex-col shrink-0 overflow-y-auto">
+      <div className="p-3">
+        <p className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          Main Navigation
+        </p>
+      </div>
+
+      <nav className="flex-1 px-3 space-y-1 pb-6 overflow-x-auto overflow-y-auto">
+        {visibleItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = currentView === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => onSelectView(item.id)}
+              className={`flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
+                isActive
+                  ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 font-bold'
+                  : 'text-slate-300 hover:bg-slate-800/80 hover:text-white'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <Icon
+                  className={`w-4 h-4 transition-transform group-hover:scale-110 ${
+                    isActive ? 'text-slate-950' : 'text-slate-400 group-hover:text-amber-400'
+                  }`}
+                />
+                <span className="truncate">{item.label}</span>
+              </div>
+              {item.badge && (
+                <span
+                  className={`px-1.5 py-0.5 text-[10px] font-bold rounded-md ${
+                    isActive ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-slate-300'
+                  }`}
+                >
+                  {item.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Role specific hint footer */}
+      <div className="p-4 border-t border-slate-800/80 bg-slate-950/30">
+        <div className="rounded-xl bg-slate-800/60 p-3 border border-slate-800 text-[11px]">
+          <p className="font-semibold text-slate-200 capitalize flex items-center gap-1.5 mb-1">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            {currentRole} Mode Active
+          </p>
+          <p className="text-slate-400 leading-snug">
+            {currentRole === 'chef' && 'Deactivate out-of-stock items & monitor orders queue.'}
+            {currentRole === 'waiter' && 'POS shows live stock servings with atomic reservations.'}
+            {currentRole === 'housekeeper' && 'Track Dirty â†’ Cleaning â†’ Clean room lifecycle.'}
+            {currentRole === 'manager' && 'Manage reservations, inventory requests & finance.'}
+            {currentRole === 'admin' && 'Full system control, MySQL DDL schema & audit logs.'}
+          </p>
+        </div>
+      </div>
+    </aside>
+  );
+};
