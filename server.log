@@ -1,0 +1,45 @@
+◇ injected env (19) from .env // tip: ⌘ enable debugging { debug: true }
+[DB] Mode detected: MySQL
+◇ injected env (0) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[DB] Connected to MySQL database "motel_management" (already initialized)
+[DB] CMS default settings verified (MySQL)
+Database already seeded. Skipping initial seed.
+Motel Management System server listening on http://0.0.0.0:3000
+[2026-08-23 01:41:51] DEBUG Creating transport: nodemailer (9.0.5; +https://nodemailer.com/; SMTP/9.0.5[client:9.0.5])
+[SMTP] Sending login OTP to artdeje1@gmail.com from "Anova Points" <artdeje1@gmail.com>
+[2026-08-23 01:41:51] DEBUG Sending mail using SMTP/9.0.5[client:9.0.5]
+[2026-08-23 01:41:51] DEBUG [604EXiy4qHA] Resolved smtp.gmail.com as 142.251.127.109 [cache miss]
+[2026-08-23 01:41:51] INFO  [604EXiy4qHA] Connection established to 142.251.127.109:587
+[2026-08-23 01:41:52] INFO  [604EXiy4qHA] Connection upgraded with STARTTLS
+[2026-08-23 01:41:52] DEBUG [604EXiy4qHA] SMTP handshake finished
+[2026-08-23 01:41:53] INFO  [604EXiy4qHA] User "artdeje1@gmail.com" authenticated
+[2026-08-23 01:41:53] INFO  Sending message <a4f77ead-1a42-1acd-442a-d9e30a4e53bf@gmail.com> to <artdeje1@gmail.com>
+[2026-08-23 01:41:53] INFO  [604EXiy4qHA] <1728 bytes encoded mime message (source size 1707 bytes)>
+[2026-08-23 01:41:54] DEBUG [604EXiy4qHA] Closing connection to the server using "end"
+[SMTP] OTP email sent successfully to artdeje1@gmail.com — messageId: <a4f77ead-1a42-1acd-442a-d9e30a4e53bf@gmail.com>
+[2026-08-23 01:41:54] DEBUG Creating transport: nodemailer (9.0.5; +https://nodemailer.com/; SMTP/9.0.5[client:9.0.5])
+[SMTP] Sending login OTP to manager@motel.com from "Anova Points" <artdeje1@gmail.com>
+[2026-08-23 01:41:54] DEBUG Sending mail using SMTP/9.0.5[client:9.0.5]
+[2026-08-23 01:41:54] DEBUG [5tsqAOBWw] Resolved smtp.gmail.com as 2a00:1450:4001:c21::6d [cache hit]
+[2026-08-23 01:41:54] INFO  [5tsqAOBWw] Connection to 2a00:1450:4001:c21::6d failed, trying 142.251.127.109
+[2026-08-23 01:41:54] INFO  [5tsqAOBWw] Connection established to 142.251.127.109:587
+[2026-08-23 01:41:55] INFO  [5tsqAOBWw] Connection upgraded with STARTTLS
+[2026-08-23 01:41:55] DEBUG [5tsqAOBWw] SMTP handshake finished
+[2026-08-23 01:41:55] INFO  [5tsqAOBWw] User "artdeje1@gmail.com" authenticated
+[2026-08-23 01:41:55] INFO  Sending message <db92220a-116e-f7d8-2586-eaa7d8d2d8b8@gmail.com> to <manager@motel.com>
+[2026-08-23 01:41:56] INFO  [5tsqAOBWw] <1727 bytes encoded mime message (source size 1706 bytes)>
+[2026-08-23 01:41:56] DEBUG [5tsqAOBWw] Closing connection to the server using "end"
+[SMTP] OTP email sent successfully to manager@motel.com — messageId: <db92220a-116e-f7d8-2586-eaa7d8d2d8b8@gmail.com>
+[2026-08-23 09:44:48] DEBUG Creating transport: nodemailer (9.0.5; +https://nodemailer.com/; SMTP/9.0.5[client:9.0.5])
+[SMTP] Sending login OTP to artdeje1@gmail.com from "Anova Points" <artdeje1@gmail.com>
+[2026-08-23 09:44:48] DEBUG Sending mail using SMTP/9.0.5[client:9.0.5]
+[2026-08-23 09:44:48] DEBUG [6M0gvwHqlbs] Resolved smtp.gmail.com as 2a00:1450:4001:c21::6d [cache miss]
+[2026-08-23 09:44:48] INFO  [6M0gvwHqlbs] Connection to 2a00:1450:4001:c21::6d failed, trying 142.251.127.108
+[2026-08-23 09:44:49] INFO  [6M0gvwHqlbs] Connection established to 142.251.127.108:587
+[2026-08-23 09:44:50] INFO  [6M0gvwHqlbs] Connection upgraded with STARTTLS
+[2026-08-23 09:44:50] DEBUG [6M0gvwHqlbs] SMTP handshake finished
+[2026-08-23 09:44:50] INFO  [6M0gvwHqlbs] User "artdeje1@gmail.com" authenticated
+[2026-08-23 09:44:50] INFO  Sending message <32178035-19f1-7afb-6f24-83b6daa72584@gmail.com> to <artdeje1@gmail.com>
+[2026-08-23 09:44:51] INFO  [6M0gvwHqlbs] <1728 bytes encoded mime message (source size 1707 bytes)>
+[2026-08-23 09:44:52] DEBUG [6M0gvwHqlbs] Closing connection to the server using "end"
+[SMTP] OTP email sent successfully to artdeje1@gmail.com — messageId: <32178035-19f1-7afb-6f24-83b6daa72584@gmail.com>

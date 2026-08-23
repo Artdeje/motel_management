@@ -2,16 +2,40 @@
   publish = "dist"
   command = "npm run build"
 
-# SPA fallback — must be last
+# === Netlify Deploy Modes ===
+# This file is configured for STATIC frontend on Netlify.
+# Static mode cannot run the Express API (/api/*) — for full dynamic Supabase data you have 2 options:
+
+# OPTION A (Recommended): Fullstack on Railway/Render (single origin, no proxy)
+#   - Deploy FULL repo to Railway: it runs `npm run build && npm start` (Express serves dist + /api)
+#   - Leave netlify.toml as-is for Netlify static preview, or don't use Netlify at all.
+#   - On Netlify, set VITE_API_URL="" (empty) for same-origin, or ignore.
+
+# OPTION B: Split — Netlify (frontend) + Railway (backend)
+#   - Deploy backend to Railway first, copy its URL.
+#   - On Netlify dashboard → Site settings → Environment variables:
+#       VITE_SUPABASE_URL=https://cnudfdpdyrplsqwmvolu.supabase.co
+#       VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_eoMJz7o-_bVKVXqiDIakRA_4fuqNBks
+#       VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+#       VITE_API_URL=https://your-railway-app.up.railway.app
+#   - Then UNCOMMENT the proxy block below so Netlify forwards /api/* to Railway:
+
+# [[redirects]]
+#   from = "/api/*"
+#   to = "https://your-railway-app.up.railway.app/api/:splat"
+#   status = 200
+#   force = true
+
+# SPA fallback — must be LAST. Netlify evaluates redirects top-to-bottom,
+# so the /api proxy above must come BEFORE this catch-all.
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# Proxy API calls to Railway backend
-# REPLACE your-railway-app.up.railway.app with your actual Railway URL after deploying
-[[redirects]]
-  from = "/api/*"
-  to = "https://your-railway-app.up.railway.app/api/:splat"
-  status = 200
-  force = true
+# Optional: headers for security/performance (applied after redirects)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
