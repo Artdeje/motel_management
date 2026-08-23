@@ -58,11 +58,7 @@ export const CmsProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const loadSettings = useCallback(async () => {
     try {
-      const token = getStoredToken();
-      if (!token) {
-        setLoading(false);
-        return;
-      }
+      // Public endpoint — works before login (dynamic branding) and after login (authenticated)
       const res = await api.getSettings();
       const fetched = res.settings || {};
       setSettings((prev) => ({ ...prev, ...fetched }));
@@ -70,7 +66,7 @@ export const CmsProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       applyTitle(fetched.site_title || FALLBACKS.site_title);
       if (fetched.favicon_url) applyFavicon(fetched.favicon_url);
     } catch {
-      // Settings unavailable — use defaults silently
+      // Settings unavailable — use defaults silently (API may be unreachable during SSG)
     } finally {
       setLoading(false);
     }

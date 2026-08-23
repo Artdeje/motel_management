@@ -1,5 +1,18 @@
 const TOKEN_KEY = 'motel_auth_token';
 
+// Dynamic API base: supports split deployment via VITE_API_URL, otherwise same-origin (fullstack)
+// Fullstack (Railway/Render/Single container): frontend and /api served by same Express server -> relative path is correct
+// Split (Netlify frontend + Railway backend): set VITE_API_URL=https://your-backend.up.railway.app
+const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") || "";
+
+function resolveUrl(endpoint: string): string {
+  if (API_BASE) {
+    // endpoint always starts with /api
+    return `${API_BASE}${endpoint}`;
+  }
+  return endpoint;
+}
+
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -23,20 +36,40 @@ async function request<T = any>(endpoint: string, options: RequestInit = {}): Pr
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(endpoint, {
-    ...options,
-    headers,
-  });
-
-  // Check status first before trying to parse JSON
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || 'An error occurred while processing your request.');
+  const url = resolveUrl(endpoint);
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    // Network failure — server not reachable, CORS blocked, or offline
+    const hint = API_BASE ? ` (API_BASE=${API_BASE})` : ' — is the server running? `npm run dev` should be on http://localhost:3000';
+    throw new Error(`Cannot reach server at ${url}${hint}. Details: ${err?.message || 'Failed to fetch'}`);
   }
 
-  const data = await response.json();
+  if (!response.ok) {
+    // Try to extract JSON error message, fallback to raw text
+    const text = await response.text();
+    let message = text;
+    try {
+      const json = JSON.parse(text);
+      message = json.error || json.message || text;
+    } catch {
+      // text is not JSON, use as-is; strip HTML if needed
+      if (text.includes('<!DOCTYPE')) message = `Server error ${response.status}: ${response.statusText}`;
+    }
+    throw new Error(message || `Request failed (${response.status})`);
+  }
 
-  return data as T;
+  // Successful response — parse JSON, handle empty body
+  const ct = response.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    return (await response.json()) as T;
+  }
+  const text = await response.text();
+  try { return JSON.parse(text) as T; } catch { return text as unknown as T; }
 }
 
 export const api = {
