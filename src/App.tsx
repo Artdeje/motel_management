@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Analytics } from '@vercel/analytics/react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { CmsProvider, useCms } from './context/CmsContext';
@@ -154,6 +155,7 @@ export default function App() {
       <AuthProvider>
         <CmsProvider>
           <MainAppContent />
+          <Analytics />
         </CmsProvider>
       </AuthProvider>
     </ToastProvider>
