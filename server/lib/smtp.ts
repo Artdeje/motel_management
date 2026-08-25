@@ -1,27 +1,66 @@
 import nodemailer from 'nodemailer';
 import { getCmsSetting } from '../db/database';
 
-function getTransporter() {
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
+export interface SmtpConfig {
+  host: string;
+  port: number;
+  secure: boolean;
+  requireTLS: boolean;
+  user: string;
+  pass: string;
+}
+
+function getSmtpConfig(): SmtpConfig {
+  // Support both SMTP_* and MAIL_* naming conventions
+  const host = process.env.SMTP_HOST || process.env.MAIL_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || process.env.MAIL_PORT || '587', 10);
+  const user = process.env.SMTP_USER || process.env.MAIL_USERNAME || process.env.MAIL_USER || '';
+  const pass = process.env.SMTP_PASS || process.env.SMTP_PASSWORD || process.env.MAIL_PASSWORD || process.env.MAIL_PASS || '';
 
   if (!user || !pass) {
-    throw new Error('SMTP credentials not configured in .env (SMTP_USER / SMTP_PASS)');
+    throw new Error('SMTP credentials not configured (SMTP_USER/SMTP_PASS or MAIL_USERNAME/MAIL_PASSWORD)');
   }
 
+  // Provider-specific defaults for reliable deployed delivery
+  const isResend = host.includes('resend.com');
+  const isSendGrid = host.includes('sendgrid.net') || host.includes('sendgrid.com');
+  const isBrevo = host.includes('brevo.com') || host.includes('sendinblue.com');
+
+  return {
+    host,
+    port,
+    secure: isResend || isSendGrid || isBrevo ? false : port === 465,
+    requireTLS: port === 587,
+    user,
+    pass,
+  };
+}
+
+function getTransporter() {
+  const cfg = getSmtpConfig();
+
   return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: false,
-    requireTLS: true,
-    auth: { user, pass },
-    logger: true,
-    debug: false,
+    host: cfg.host,
+    port: cfg.port,
+    secure: cfg.secure,
+    requireTLS: cfg.requireTLS,
+    auth: { user: cfg.user, pass: cfg.pass },
+    logger: process.env.SMTP_DEBUG === 'true',
+    debug: process.env.SMTP_DEBUG === 'true',
+    // Some providers (Resend/SendGrid) need a slightly longer timeout on cloud hosts
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
   });
 }
 
 function getFromAddress(siteTitle: string): string {
-  const user = process.env.SMTP_USER;
+  const user = process.env.SMTP_USER || process.env.MAIL_USERNAME || process.env.MAIL_USER;
+  const from = process.env.SMTP_FROM || process.env.MAIL_FROM;
+  const fromName = process.env.SMTP_FROM_NAME || process.env.MAIL_FROM_NAME;
+
+  if (from) return from;
+  if (fromName && user) return `"${fromName}" <${user}>`;
   return `"${siteTitle}" <${user}>`;
 }
 
@@ -57,16 +96,20 @@ export async function sendOtpEmail(to: string, otpCode: string, purpose: 'login'
     </div>
   `;
 
+  const text = `${siteTitle}\n\n${actionText}\n\nVerification Code: ${otpCode}\n\nThis code expires in 5 minutes.`;
+
   try {
     const transporter = getTransporter();
     const from = getFromAddress(siteTitle);
 
-    console.log(`[SMTP] Sending ${purpose} OTP to ${to} from ${from}`);
+    const host = process.env.SMTP_HOST || process.env.MAIL_HOST || 'smtp.gmail.com';
+    console.log(`[SMTP] Sending ${purpose} OTP to ${to} via ${host} from ${from}`);
 
     const info = await transporter.sendMail({
       from,
       to,
       subject,
+      text,
       html,
     });
 
@@ -76,6 +119,26 @@ export async function sendOtpEmail(to: string, otpCode: string, purpose: 'login'
     console.error(`[SMTP] FAILED to send OTP to ${to}:`, err.message || err);
     if (err.code) console.error('[SMTP] Error code:', err.code);
     if (err.command) console.error('[SMTP] Failed command:', err.command);
+    if (err.response) console.error('[SMTP] Server response:', err.response);
     return false;
+  }
+}
+
+export async function verifySmtpConnection(): Promise<{ ok: boolean; message: string; provider: string }> {
+  try {
+    const cfg = getSmtpConfig();
+    const transporter = getTransporter();
+    await transporter.verify();
+    return {
+      ok: true,
+      message: `Connected to ${cfg.host}:${cfg.port} as ${cfg.user}`,
+      provider: cfg.host,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      message: err.message || 'Unknown SMTP error',
+      provider: process.env.SMTP_HOST || 'unknown',
+    };
   }
 }
