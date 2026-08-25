@@ -386,6 +386,111 @@ export async function runAutoCheckIns(): Promise<number> {
   return processed;
 }
 
+// Auto check-out: any 'CheckedIn' reservation whose check-out date has passed
+// is automatically checked out, room set to Dirty.
+export async function runAutoCheckOuts(): Promise<number> {
+  const overdueReservations = await dbAll<any>(
+    `SELECT r.*, g.full_name as guest_name
+     FROM reservations r
+     JOIN guests g ON r.guest_id = g.id
+     WHERE r.status = 'CheckedIn'
+       AND r.check_out_date < CURDATE()
+       AND EXISTS (SELECT 1 FROM check_ins ci WHERE ci.reservation_id = r.id AND ci.status = 'Active')`
+  );
+
+  let processed = 0;
+  for (const res of overdueReservations) {
+    const room = await dbGet<any>('SELECT * FROM rooms WHERE id = ?', [res.room_id]);
+    if (!room) continue;
+
+    const isOccupied = room.status === 'Occupied';
+    const isDirtyOrphan = room.status === 'Dirty' && !room.current_occupant_id;
+    if (!isOccupied && !isDirtyOrphan) continue;
+
+    const checkIn = await dbGet<any>(
+      'SELECT * FROM check_ins WHERE reservation_id = ? AND status = "Active" ORDER BY check_in_time DESC LIMIT 1',
+      [res.id]
+    );
+
+    try {
+      if (isOccupied) {
+        const guest = room.current_occupant_id ? await dbGet<any>('SELECT * FROM guests WHERE id = ?', [room.current_occupant_id]) : null;
+        const invoice = checkIn ? await dbGet<any>('SELECT * FROM invoices WHERE check_in_id = ?', [checkIn.id]) : null;
+        const roomServiceOrders = await dbAll<any>(
+          'SELECT * FROM orders WHERE room_id = ? AND payment_status = "ChargedToRoom" AND status != "Cancelled"',
+          [res.room_id]
+        );
+
+        let ordersTotal = 0;
+        for (const ord of roomServiceOrders) { ordersTotal += ord.total_amount; }
+
+        await dbTransaction(async () => {
+          if (invoice && roomServiceOrders.length > 0) {
+            for (const ord of roomServiceOrders) {
+              const orderItems = await dbAll<any>('SELECT * FROM order_items WHERE order_id = ?', [ord.id]);
+              for (const item of orderItems) {
+                const iitId = `iit-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+                await dbRun(
+                  `INSERT INTO invoice_items (id, invoice_id, description, item_type, unit_price, quantity, total_price, reference_id)
+                   VALUES (?, ?, ?, 'Food/Drinks', ?, ?, ?, ?)`,
+                  [iitId, invoice.id, `${item.menu_item_name} (Order #${ord.order_number})`, item.unit_price, item.quantity, item.total_price, ord.id]
+                );
+              }
+              await dbRun('UPDATE orders SET payment_status = "Paid" WHERE id = ?', [ord.id]);
+            }
+            const newTotal = invoice.total_amount + ordersTotal;
+            await dbRun(
+              'UPDATE invoices SET subtotal = ?, total_amount = ?, balance_due = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+              [newTotal, newTotal, Math.max(0, newTotal - invoice.amount_paid), invoice.id]
+            );
+          }
+
+          if (checkIn) {
+            await dbRun('UPDATE check_ins SET status = "Completed", actual_check_out_time = CURRENT_TIMESTAMP WHERE id = ?', [checkIn.id]);
+          }
+          await dbRun('UPDATE reservations SET status = "CheckedOut" WHERE id = ?', [res.id]);
+          await dbRun(
+            'UPDATE rooms SET status = "Dirty", current_occupant_id = NULL, notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [`Auto checked out on ${new Date().toLocaleDateString()}. Past scheduled checkout date.`, res.room_id]
+          );
+          await createNotification(
+            'maintenance',
+            `Room ${room.room_number} Requires Cleaning (Auto Check-Out)`,
+            `Reservation ${res.reservation_number} (${res.guest_name}) was automatically checked out. Room set to DIRTY.`,
+            'housekeeper', null, '/housekeeping'
+          );
+        });
+      } else {
+        // Orphaned: room already Dirty, just close out check-in and reservation
+        await dbTransaction(async () => {
+          if (checkIn) {
+            await dbRun('UPDATE check_ins SET status = "Completed", actual_check_out_time = CURRENT_TIMESTAMP WHERE id = ?', [checkIn.id]);
+          }
+          await dbRun('UPDATE reservations SET status = "CheckedOut" WHERE id = ?', [res.id]);
+          await dbRun(
+            'UPDATE rooms SET notes = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+            [`Auto closed on ${new Date().toLocaleDateString()}. Reservation was overdue.`, res.room_id]
+          );
+        });
+      }
+
+      await logAudit(
+        { id: res.created_by || 'system', username: 'system', role: 'system' },
+        'Reservations', 'Auto Check-Out', res.id,
+        `Auto checked out reservation ${res.reservation_number} (Guest: ${res.guest_name})`
+      );
+      processed += 1;
+    } catch (err: any) {
+      console.error(`Auto check-out failed for reservation ${res.reservation_number}:`, err.message);
+    }
+  }
+
+  if (processed > 0) {
+    console.log(`Auto check-out job: ${processed} reservation(s) checked out automatically.`);
+  }
+  return processed;
+}
+
 // POST /api/check-in - Check guest into room
 roomsRouter.post('/check-in', authMiddleware, requireRoles(['admin', 'manager']), async (req: Request, res: Response) => {
   const { reservation_id, guest_id, room_id, expected_check_out_date, deposit_paid, payment_method, notes } = req.body;

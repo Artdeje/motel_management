@@ -4,6 +4,7 @@ import path from 'path';
 import { dbAll, dbGet, dbRun } from '../db/database';
 import { authMiddleware, requireRoles, logAudit } from '../middleware/auth';
 import { seedDatabaseIfEmpty } from '../db/seed';
+import { verifySmtpConnection, sendOtpEmail } from '../lib/smtp';
 
 export const systemRouter = Router();
 
@@ -93,4 +94,28 @@ systemRouter.get('/system/schema-info', authMiddleware, requireRoles(['admin']),
     tables,
     schemaSql,
   });
+});
+
+// POST /api/system/test-smtp - Admin endpoint to verify SMTP configuration
+systemRouter.post('/system/test-smtp', authMiddleware, requireRoles(['admin']), async (req: Request, res: Response) => {
+  const { email } = req.body;
+  const targetEmail = email || process.env.SMTP_USER;
+
+  try {
+    const verify = await verifySmtpConnection();
+    if (!verify.ok) {
+      return res.status(400).json({ ok: false, message: verify.message, provider: verify.provider });
+    }
+
+    const testCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const sent = await sendOtpEmail(targetEmail, testCode, 'login');
+
+    return res.json({
+      ok: sent,
+      message: sent ? `Test OTP sent to ${targetEmail}` : `SMTP connected but failed to send email to ${targetEmail}`,
+      provider: verify.provider,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ ok: false, message: err.message || 'SMTP test failed', provider: process.env.SMTP_HOST });
+  }
 });

@@ -36,7 +36,7 @@ function generateTokenId(userId: string): string {
   return `token-${userId}-${Date.now()}`;
 }
 
-// Login - Step 1: Validate credentials, send OTP
+// Login: Validate credentials and return JWT token directly
 authRouter.post('/login', async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
@@ -66,32 +66,29 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid username or password' });
     }
 
-    // Generate and store OTP
-    const otpCode = generateOtp();
-    const otpId = `otp-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    const authUser: AuthenticatedUser = {
+      id: user.id,
+      username: user.username,
+      full_name: user.full_name,
+      role: user.role_name,
+      role_id: user.role_id,
+    };
 
-    await dbRun(
-      'INSERT INTO otp_tokens (id, user_id, email, otp_code, purpose, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [otpId, user.id, user.email, otpCode, 'login', expiresAt]
-    );
-
-    // Send OTP via email (non-blocking — login succeeds even if email fails)
-    let emailSent = false;
-    try { emailSent = await sendOtpEmail(user.email, otpCode, 'login'); } catch (e:any){ console.error('OTP email failed:', e.message); }
-
-    // Mask email for display
-    const maskedEmail = user.email.replace(/(.{2})(.*)(@.*)/, '$1***$3');
+    const token = generateToken(authUser);
+    await logAudit(authUser, 'Auth', 'Login', user.id, `User ${user.username} logged in`, req.ip);
 
     return res.json({
-      requiresOtp: true,
-      userId: user.id,
-      username: user.username,
-      email: maskedEmail,
-      fullName: user.full_name,
-      role: user.role_name,
-      roleDisplayName: user.role_display_name,
-      emailSent,
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        full_name: user.full_name,
+        phone: user.phone,
+        role: user.role_name,
+        role_display_name: user.role_display_name,
+        avatar_url: user.avatar_url,
+      },
     });
   } catch (err:any) {
     console.error('Login error:', err);
@@ -99,7 +96,7 @@ authRouter.post('/login', async (req: Request, res: Response) => {
   }
 });
 
-// Login - Step 2: Verify OTP and return token
+// Verify OTP (password reset only)
 authRouter.post('/verify-otp', async (req: Request, res: Response) => {
   try {
     const { userId, otpCode, purpose } = req.body;
@@ -107,12 +104,12 @@ authRouter.post('/verify-otp', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'User ID and OTP code are required' });
     }
 
-    // Rate limit: 5 OTP attempts per 10 minutes per user
-    if (!checkRateLimit(`otp:${userId}`, 5, 10 * 60 * 1000)) {
-      return res.status(429).json({ error: 'Too many OTP attempts. Please request a new code.' });
-    }
-
     const otpPurpose = purpose || 'login';
+
+    // Only allow password_reset purpose for OTP verification
+    if (otpPurpose === 'login') {
+      return res.status(400).json({ error: 'Login OTP is no longer supported. Use password and username to login.' });
+    }
 
     const otpRecord = await dbGet<any>(
       'SELECT * FROM otp_tokens WHERE user_id = ? AND otp_code = ? AND purpose = ? AND used = 0 AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1',
@@ -168,12 +165,19 @@ authRouter.post('/verify-otp', async (req: Request, res: Response) => {
   }
 });
 
-// Resend OTP
+// Resend OTP (password reset only)
 authRouter.post('/resend-otp', async (req: Request, res: Response) => {
   try {
     const { userId, purpose } = req.body;
     if (!userId) {
       return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const otpPurpose = purpose || 'login';
+
+    // Only allow password_reset purpose for OTP resend
+    if (otpPurpose === 'login') {
+      return res.status(400).json({ error: 'Login OTP is no longer supported.' });
     }
 
     const user = await dbGet<any>('SELECT * FROM users WHERE id = ? AND is_active = 1', [userId]);
@@ -184,7 +188,7 @@ authRouter.post('/resend-otp', async (req: Request, res: Response) => {
     // Invalidate old OTPs
     await dbRun(
       'UPDATE otp_tokens SET used = 1 WHERE user_id = ? AND purpose = ? AND used = 0',
-      [userId, purpose || 'login']
+      [userId, otpPurpose]
     );
 
     // Generate new OTP
@@ -194,11 +198,11 @@ authRouter.post('/resend-otp', async (req: Request, res: Response) => {
 
     await dbRun(
       'INSERT INTO otp_tokens (id, user_id, email, otp_code, purpose, expires_at) VALUES (?, ?, ?, ?, ?, ?)',
-      [otpId, user.id, user.email, otpCode, purpose || 'login', expiresAt]
+      [otpId, user.id, user.email, otpCode, otpPurpose, expiresAt]
     );
 
     let emailSent = false;
-    try { emailSent = await sendOtpEmail(user.email, otpCode, purpose || 'login'); } catch(e:any){ console.error('Resend OTP email failed:', e.message); }
+    try { emailSent = await sendOtpEmail(user.email, otpCode, otpPurpose); } catch(e:any){ console.error('Resend OTP email failed:', e.message); }
 
     return res.json({ message: 'Verification code resent', emailSent });
   } catch (err:any) {

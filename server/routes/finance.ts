@@ -4,77 +4,80 @@ import { authMiddleware, logAudit, requireRoles } from '../middleware/auth';
 
 export const financeRouter = Router();
 
-// GET /api/finance/trend - Monthly revenue/expenses/profit trend + payment methods + revenue by department
+// GET /api/finance/trend - Revenue/expenses/profit trend + payment methods + revenue by department
 financeRouter.get('/finance/trend', authMiddleware, requireRoles(['admin', 'manager']), async (req: Request, res: Response) => {
   try {
-    const months = parseInt(req.query.months as string) || 12;
+    const period = (req.query.period as string) || 'monthly';
 
-    // Monthly revenue trend
+    const periodConfig: Record<string, { interval: string; trendInterval: string; groupFmt: string; labelFmt: string }> = {
+      daily:   { interval: '1 DAY',    trendInterval: '7 DAY',  groupFmt: '%Y-%m-%d %H:00', labelFmt: '%H:00' },
+      weekly:  { interval: '7 DAY',    trendInterval: '28 DAY', groupFmt: '%Y-%m-%d',        labelFmt: '%b %d' },
+      monthly: { interval: '12 MONTH', trendInterval: '12 MONTH', groupFmt: '%Y-%m',          labelFmt: '%b %Y' },
+      annual:  { interval: '5 YEAR',   trendInterval: '5 YEAR', groupFmt: '%Y',              labelFmt: '%Y' },
+    };
+    const pc = periodConfig[period] || periodConfig.monthly;
+
+    // Revenue trend
     const revenueRows = await dbAll<any>(
-      `SELECT DATE_FORMAT(p.payment_date, '%Y-%m') as month_key,
-              DATE_FORMAT(p.payment_date, '%b %Y') as month_label,
+      `SELECT DATE_FORMAT(p.payment_date, '${pc.groupFmt}') as period_key,
+              DATE_FORMAT(p.payment_date, '${pc.labelFmt}') as period_label,
               COALESCE(SUM(p.amount), 0) as revenue
        FROM payments p
-       WHERE p.payment_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
-       GROUP BY month_key, month_label
-       ORDER BY month_key ASC`,
-      [months]
+       WHERE p.payment_date >= DATE_SUB(CURDATE(), INTERVAL ${pc.trendInterval})
+       GROUP BY period_key, period_label
+       ORDER BY period_key ASC`
     );
 
-    // Monthly expense trend
+    // Expense trend
     const expenseRows = await dbAll<any>(
-      `SELECT DATE_FORMAT(e.expense_date, '%Y-%m') as month_key,
-              DATE_FORMAT(e.expense_date, '%b %Y') as month_label,
+      `SELECT DATE_FORMAT(e.expense_date, '${pc.groupFmt}') as period_key,
+              DATE_FORMAT(e.expense_date, '${pc.labelFmt}') as period_label,
               COALESCE(SUM(e.amount), 0) as expenses
        FROM expenses e
-       WHERE e.expense_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
-       GROUP BY month_key, month_label
-       ORDER BY month_key ASC`,
-      [months]
+       WHERE e.expense_date >= DATE_SUB(CURDATE(), INTERVAL ${pc.trendInterval})
+       GROUP BY period_key, period_label
+       ORDER BY period_key ASC`
     );
 
     // Merge into trend array
-    const monthMap = new Map<string, { month: string; revenue: number; expenses: number; profit: number }>();
+    const periodMap = new Map<string, { month: string; revenue: number; expenses: number; profit: number }>();
     revenueRows.forEach((r) => {
-      monthMap.set(r.month_key, { month: r.month_label, revenue: r.revenue, expenses: 0, profit: 0 });
+      periodMap.set(r.period_key, { month: r.period_label, revenue: r.revenue, expenses: 0, profit: 0 });
     });
     expenseRows.forEach((r) => {
-      if (monthMap.has(r.month_key)) {
-        monthMap.get(r.month_key)!.expenses = r.expenses;
+      if (periodMap.has(r.period_key)) {
+        periodMap.get(r.period_key)!.expenses = r.expenses;
       } else {
-        monthMap.set(r.month_key, { month: r.month_label, revenue: 0, expenses: r.expenses, profit: 0 });
+        periodMap.set(r.period_key, { month: r.period_label, revenue: 0, expenses: r.expenses, profit: 0 });
       }
     });
-    const trend = Array.from(monthMap.values()).map((t) => ({ ...t, profit: t.revenue - t.expenses }));
+    const trend = Array.from(periodMap.values()).map((t) => ({ ...t, profit: t.revenue - t.expenses }));
 
-    // Payment method distribution
+    // Payment method distribution (filtered by period)
     const paymentMethods = await dbAll<any>(
       `SELECT payment_method, COUNT(*) as count, SUM(amount) as total
        FROM payments
-       WHERE payment_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
+       WHERE payment_date >= DATE_SUB(CURDATE(), INTERVAL ${pc.trendInterval})
        GROUP BY payment_method
-       ORDER BY total DESC`,
-      [months]
+       ORDER BY total DESC`
     );
 
-    // Revenue by department (payment_category)
+    // Revenue by department (filtered by period)
     const revenueByDept = await dbAll<any>(
       `SELECT payment_category as department, SUM(amount) as total
        FROM payments
-       WHERE payment_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
+       WHERE payment_date >= DATE_SUB(CURDATE(), INTERVAL ${pc.trendInterval})
        GROUP BY payment_category
-       ORDER BY total DESC`,
-      [months]
+       ORDER BY total DESC`
     );
 
-    // Expense by category
+    // Expense by category (filtered by period)
     const expensesByCategory = await dbAll<any>(
       `SELECT category, SUM(amount) as total
        FROM expenses
-       WHERE expense_date >= DATE_SUB(CURDATE(), INTERVAL ? MONTH)
+       WHERE expense_date >= DATE_SUB(CURDATE(), INTERVAL ${pc.trendInterval})
        GROUP BY category
-       ORDER BY total DESC`,
-      [months]
+       ORDER BY total DESC`
     );
 
     return res.json({ trend, paymentMethods, revenueByDept, expensesByCategory });
@@ -86,28 +89,47 @@ financeRouter.get('/finance/trend', authMiddleware, requireRoles(['admin', 'mana
 
 // GET /api/finance/overview - Financial metrics, revenue breakdown, expenses, food cost %
 financeRouter.get('/finance/overview', authMiddleware, requireRoles(['admin', 'manager']), async (req: Request, res: Response) => {
-  // 1. Revenue by category
-  const roomRev = (await dbGet<any>('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE payment_category IN ("Room", "Deposit")'))?.total || 0;
-  const foodRev = (await dbGet<any>('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE payment_category = "Food"')) || { total: 0 };
-  const barRev = (await dbGet<any>('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE payment_category = "Drinks"')) || { total: 0 };
-  const orderPayments = (await dbGet<any>('SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE payment_category = "Food/Drinks"')) || { total: 0 };
+  const period = (req.query.period as string) || 'monthly';
 
-  const totalRevenue = (await dbGet<any>('SELECT COALESCE(SUM(amount), 0) as total FROM payments'))?.total || 0;
+  const periodConfig: Record<string, string> = {
+    daily: '1 DAY', weekly: '7 DAY', monthly: '30 DAY', annual: '12 MONTH',
+  };
+  const interval = periodConfig[period] || '30 DAY';
 
-  // 2. Expenses by category
-  const totalExpenses = (await dbGet<any>('SELECT COALESCE(SUM(amount), 0) as total FROM expenses'))?.total || 0;
+  // 1. Revenue by category (filtered by period)
+  const roomRev = (await dbGet<any>(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE payment_category IN ("Room", "Deposit") AND payment_date >= DATE_SUB(CURDATE(), INTERVAL ${interval})`
+  ))?.total || 0;
+  const foodRev = (await dbGet<any>(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE payment_category = "Food" AND payment_date >= DATE_SUB(CURDATE(), INTERVAL ${interval})`
+  )) || { total: 0 };
+  const barRev = (await dbGet<any>(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE payment_category = "Drinks" AND payment_date >= DATE_SUB(CURDATE(), INTERVAL ${interval})`
+  )) || { total: 0 };
+  const orderPayments = (await dbGet<any>(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE payment_category = "Food/Drinks" AND payment_date >= DATE_SUB(CURDATE(), INTERVAL ${interval})`
+  )) || { total: 0 };
+
+  const totalRevenue = (await dbGet<any>(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE payment_date >= DATE_SUB(CURDATE(), INTERVAL ${interval})`
+  ))?.total || 0;
+
+  // 2. Expenses by category (filtered by period)
+  const totalExpenses = (await dbGet<any>(
+    `SELECT COALESCE(SUM(amount), 0) as total FROM expenses WHERE expense_date >= DATE_SUB(CURDATE(), INTERVAL ${interval})`
+  ))?.total || 0;
   const expensesByCategory = await dbAll<any>(
-    'SELECT category, SUM(amount) as total FROM expenses GROUP BY category ORDER BY total DESC'
+    `SELECT category, SUM(amount) as total FROM expenses WHERE expense_date >= DATE_SUB(CURDATE(), INTERVAL ${interval}) GROUP BY category ORDER BY total DESC`
   );
 
-  // 3. Food Cost Calculation
-  // Food Cost = Sum of consumed kitchen inventory transactions
+  // 3. Food Cost Calculation (filtered by period)
   const foodCostSum = (await dbGet<any>(
     `SELECT COALESCE(SUM(it.total_cost), 0) as total
      FROM inventory_transactions it
      JOIN inventory_items i ON it.item_id = i.id
      JOIN inventory_categories ic ON i.category_id = ic.id
-     WHERE ic.name = 'Kitchen Ingredients' AND it.transaction_type IN ('Consumed', 'Damaged')`
+     WHERE ic.name = 'Kitchen Ingredients' AND it.transaction_type IN ('Consumed', 'Damaged')
+       AND it.created_at >= DATE_SUB(CURDATE(), INTERVAL ${interval})`
   ))?.total || 0;
 
   const foodRevenueTotal = foodRev.total + orderPayments.total;
