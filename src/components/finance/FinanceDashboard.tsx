@@ -51,7 +51,7 @@ export const FinanceDashboard: React.FC = () => {
         api.getInvoices(),
         api.getExpenses(),
         api.getPayments(),
-        api.getFinanceTrend(12).catch(() => null),
+        api.getFinanceTrend('monthly').catch(() => null),
       ]);
       setOverview(ovRes);
       setInvoices(invRes.invoices || []);
