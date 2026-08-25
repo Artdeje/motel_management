@@ -179,9 +179,9 @@ export const api = {
   clockOut: (payload: any) => request('/api/staff/attendance/clock-out', { method: 'POST', body: JSON.stringify(payload) }),
 
   // Finance & Invoicing
-  getFinanceOverview: () => request('/api/finance/overview'),
-  getFinancialOverview: () => request('/api/finance/overview'),
-  getFinanceTrend: (months?: number) => request(`/api/finance/trend${months ? `?months=${months}` : ''}`),
+  getFinanceOverview: (period?: string) => request(`/api/finance/overview${period ? `?period=${period}` : ''}`),
+  getFinancialOverview: (period?: string) => request(`/api/finance/overview${period ? `?period=${period}` : ''}`),
+  getFinanceTrend: (period?: string) => request(`/api/finance/trend${period ? `?period=${period}` : ''}`),
   getInvoices: () => request('/api/finance/invoices'),
   getPayments: () => request('/api/finance/payments'),
   createPayment: (payment: any) => request('/api/finance/payments', { method: 'POST', body: JSON.stringify(payment) }),
