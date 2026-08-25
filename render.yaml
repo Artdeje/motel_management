@@ -1,11 +1,10 @@
 services:
   - type: web
     name: motel-management
-    runtime: node
+    runtime: docker
     region: frankfurt
     plan: free
-    buildCommand: npm run build
-    startCommand: npm start
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
@@ -21,15 +20,15 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: SMTP_HOST
-        value: smtp.gmail.com
+        value: smtp.hostinger.com
       - key: SMTP_PORT
-        value: "587"
+        value: "465"
       - key: SMTP_USER
-        value: artdeje1@gmail.com
+        value: dev@fromgreenrw.org
       - key: SMTP_PASS
         sync: false
       - key: SMTP_FROM
-        value: Grand Horizon Motel <artdeje1@gmail.com>
+        value: dev@fromgreenrw.org
       - key: CURRENCY
         value: RWF
       - key: CURRENCY_SYMBOL
