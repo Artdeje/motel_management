@@ -4,22 +4,20 @@ import { authMiddleware, logAudit, requireRoles, createNotification } from '../m
 
 export const inventoryRouter = Router();
 
-// Helper: canonical stock labels - Drinks, Foods, Ingredients, Tools
+// Helper: canonical stock categories - Bar, Kitchen Ingredients, Others
 function getStockLabel(categoryName: string, department?: string): string {
   const n = (categoryName || '').toLowerCase();
   const d = (department || '').toLowerCase();
-  if (n.includes('drink') || n.includes('bar') || n.includes('beverage') || d === 'bar') return 'Drinks';
-  if (n.includes('linen') || n.includes('clean') || n.includes('tool') || n.includes('other') || n.includes('maintenance') || d === 'housekeeping') return 'Tools';
-  if (n.includes('ingredient') || n.includes('spice') || n.includes('oil') || n.includes('produce')) return 'Ingredients';
-  return 'Foods';
+  if (n.includes('bar') || n.includes('drink') || n.includes('beverage') || n.includes('wine') || n.includes('beer') || n.includes('juice') || n.includes('water') || n.includes('soda') || d === 'bar') return 'Bar';
+  if (n.includes('kitchen') || n.includes('ingredient') || n.includes('food') || n.includes('spice') || n.includes('oil') || n.includes('produce') || n.includes('meat') || n.includes('poultry') || n.includes('dairy') || n.includes('grain') || d === 'kitchen') return 'Kitchen Ingredients';
+  return 'Others';
 }
 
 async function ensureStockLabels() {
   const labels = [
-    { id: 'cat-drinks', name: 'Drinks', description: 'Beverages, juices, water, beer, wine, spirits' },
-    { id: 'cat-foods', name: 'Foods', description: 'Prepared foods, snacks, staples, dairy, meats' },
-    { id: 'cat-ingredients', name: 'Ingredients', description: 'Raw ingredients, spices, oils, produce, grains' },
-    { id: 'cat-tools', name: 'Tools', description: 'Cleaning supplies, linen, tools, amenities, maintenance spares' },
+    { id: 'cat-bar-stock', name: 'Bar', description: 'Bar stock: beverages, juices, water, beer, wine, spirits' },
+    { id: 'cat-kitchen-ing', name: 'Kitchen Ingredients', description: 'Kitchen ingredients: meats, poultry, dairy, produce, grains, spices, oils' },
+    { id: 'cat-others-stock', name: 'Others', description: 'Other stock: cleaning supplies, linen, tools, amenities, maintenance spares' },
   ];
   for (const c of labels) {
     const exists = await dbGet<any>('SELECT id FROM inventory_categories WHERE id = ? OR name = ?', [c.id, c.name]);
@@ -53,10 +51,9 @@ inventoryRouter.get('/inventory/analytics', authMiddleware, async (req: Request,
     let totalCurrentQty = 0, totalValuation = 0, totalItems = allItems.length;
     let lowStockCount = 0, outOfStockCount = 0;
     const labelBreakdown: Record<string, { count: number; currentQty: number; valuation: number }> = {
-      Drinks: { count: 0, currentQty: 0, valuation: 0 },
-      Foods: { count: 0, currentQty: 0, valuation: 0 },
-      Ingredients: { count: 0, currentQty: 0, valuation: 0 },
-      Tools: { count: 0, currentQty: 0, valuation: 0 },
+      Bar: { count: 0, currentQty: 0, valuation: 0 },
+      'Kitchen Ingredients': { count: 0, currentQty: 0, valuation: 0 },
+      Others: { count: 0, currentQty: 0, valuation: 0 },
     };
     for (const it of allItems) {
       const avail = (it.current_quantity - (it.reserved_quantity || 0));

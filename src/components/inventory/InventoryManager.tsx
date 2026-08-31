@@ -37,16 +37,14 @@ import {
 } from 'recharts';
 
 const LABEL_COLORS: Record<string, string> = {
-  Drinks: '#a78bfa',
-  Foods: '#34d399',
-  Ingredients: '#fbbf24',
-  Tools: '#38bdf8',
+  Bar: '#a78bfa',
+  'Kitchen Ingredients': '#fbbf24',
+  Others: '#38bdf8',
 };
 const LABEL_BG: Record<string, string> = {
-  Drinks: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-  Foods: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-  Ingredients: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-  Tools: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+  Bar: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  'Kitchen Ingredients': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  Others: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
 };
 
 export const InventoryManager: React.FC = () => {
@@ -345,10 +343,9 @@ export const InventoryManager: React.FC = () => {
         th{tex-align:left;padding:8px 10px;background:#0f172a;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
         td{padding:8px 10px;border-bottom:1px solid #f1f5f9;font-size:10px}
         .badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:9px;font-weight:800;border:1px solid}
-        .bg-drinks{background:#ede9fe;color:#6d28d9;border-color:#ddd6fe}
-        .bg-foods{background:#d1fae5;color:#065f46;border-color:#a7f3d0}
-        .bg-ingredients{background:#fef3c7;color:#92400e;border-color:#fde68a}
-        .bg-tools{background:#e0f2fe;color:#0c4a6e;border-color:#bae6fd}
+        .bg-bar{background:#ede9fe;color:#6d28d9;border-color:#ddd6fe}
+        .bg-kitchen{background:#fef3c7;color:#92400e;border-color:#fde68a}
+        .bg-others{background:#e0f2fe;color:#0c4a6e;border-color:#bae6fd}
         .footer{margin-top:20px;padding-top:10px;border-top:2px solid #0f172a;text-align:center;font-size:8px;color:#94a3b8}
       </style></head><body>` + el.innerHTML + `</body></html>`);
     w.document.close();
@@ -512,7 +509,7 @@ export const InventoryManager: React.FC = () => {
                   <tbody>
                     {analytics.labelBreakdown && Object.entries(analytics.labelBreakdown).map(([label, v]:any)=>(
                       <tr key={label}>
-                        <td><span className={`badge bg-${label.toLowerCase()}`}>{label}</span></td>
+                        <td><span className={`badge ${label.toLowerCase().includes('bar') ? 'bg-bar' : label.toLowerCase().includes('kitchen') ? 'bg-kitchen' : 'bg-others'}`}>{label}</span></td>
                         <td className="font-mono font-bold">{v.count}</td>
                         <td className="font-mono">{v.currentQty.toLocaleString()}</td>
                         <td className="font-mono">{formatCurrency(v.valuation)}</td>
@@ -545,14 +542,13 @@ export const InventoryManager: React.FC = () => {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1"><ClipboardList className="w-3 h-3"/> Label:</span>
-              {['all','Drinks','Foods','Ingredients','Tools'].map(l=>(
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1"><ClipboardList className="w-3 h-3"/> Category:</span>
+              {['all','Bar','Kitchen Ingredients','Others'].map(l=>(
                 <button key={l} onClick={()=> setSelectedLabel(l)} className={`px-3 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 ${selectedLabel===l?'bg-amber-500 text-slate-950 font-bold':'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
-                  {l==='Drinks' && <Wine className="w-3 h-3"/>}
-                  {l==='Foods' && <UtensilsCrossed className="w-3 h-3"/>}
-                  {l==='Ingredients' && <Layers className="w-3 h-3"/>}
-                  {l==='Tools' && <Wrench className="w-3 h-3"/>}
-                  {l==='all'?'All Labels':l}
+                  {l==='Bar' && <Wine className="w-3 h-3"/>}
+                  {l==='Kitchen Ingredients' && <UtensilsCrossed className="w-3 h-3"/>}
+                  {l==='Others' && <Wrench className="w-3 h-3"/>}
+                  {l==='all'?'All Categories':l}
                 </button>
               ))}
             </div>
@@ -588,7 +584,7 @@ export const InventoryManager: React.FC = () => {
                     return (
                       <tr key={it.id} className="hover:bg-slate-800/50 transition-colors">
                         <td className="p-3.5"><p className="font-bold text-white">{it.name}</p><p className="text-[10px] font-mono text-amber-400">{it.sku}</p></td>
-                        <td className="p-3.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${LABEL_BG[it.stock_label || 'Foods'] || 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>{it.stock_label || 'Foods'}</span></td>
+                        <td className="p-3.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${LABEL_BG[it.stock_label || 'Others'] || 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>{it.stock_label || 'Others'}</span></td>
                         <td className="p-3.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${it.department === 'Kitchen' ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' : it.department === 'Bar' ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : it.department === 'Housekeeping' ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' : it.department === 'Manager' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>{it.department || 'General'}</span></td>
                         <td className="p-3.5">{it.category_name}</td>
                         <td className="p-3.5 font-bold text-white">{it.current_quantity} {it.unit}</td>
@@ -620,7 +616,7 @@ export const InventoryManager: React.FC = () => {
             <div key={it.id} className="p-4 rounded-2xl bg-amber-950/20 border border-amber-500/30 shadow-xl flex flex-col justify-between">
               <div>
                 <div className="flex items-start justify-between pb-2 border-b border-slate-800">
-                  <div><h4 className="text-sm font-bold text-white">{it.name}</h4><p className="text-[10px] font-mono text-amber-400">{it.sku} &bull; <span className={LABEL_BG[it.stock_label || 'Foods'] + ' px-1 rounded'}>{it.stock_label}</span></p></div>
+                  <div><h4 className="text-sm font-bold text-white">{it.name}</h4><p className="text-[10px] font-mono text-amber-400">{it.sku} &bull; <span className={(LABEL_BG[it.stock_label || 'Others'] || '') + ' px-1 rounded'}>{it.stock_label || 'Others'}</span></p></div>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Below Threshold</span>
                 </div>
                 <div className="py-3 text-xs space-y-1.5">
