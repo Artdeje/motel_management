@@ -612,43 +612,48 @@ export const InventoryManager: React.FC = () => {
             </div>
           </div>
 
-          <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 font-semibold">
-                  <tr>
-                    <th className="p-3.5">SKU / Item</th>
-                    <th className="p-3.5">Label</th>
-                    <th className="p-3.5">Department</th>
-                    <th className="p-3.5">Category</th>
-                    <th className="p-3.5">Total Physical</th>
-                    <th className="p-3.5">Reserved</th>
-                    <th className="p-3.5">Net Available</th>
-                    <th className="p-3.5">Unit Cost</th>
-                    <th className="p-3.5">Valuation</th>
-                    <th className="p-3.5 text-right">Actions</th>
+              <table className="w-full text-left">
+                <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
+                  <tr className="text-[11px] font-bold tracking-widest uppercase">
+                    <th className="px-4 py-3.5 font-extrabold">Item & SKU</th>
+                    <th className="px-3 py-3.5 font-extrabold">Stock Label</th>
+                    <th className="px-3 py-3.5 font-extrabold">Department</th>
+                    <th className="px-3 py-3.5 font-extrabold">Category</th>
+                    <th className="px-3 py-3.5 font-extrabold text-right">Physical</th>
+                    <th className="px-3 py-3.5 font-extrabold text-right">Reserved</th>
+                    <th className="px-3 py-3.5 font-extrabold text-right">Available</th>
+                    <th className="px-3 py-3.5 font-extrabold text-right">Unit Cost</th>
+                    <th className="px-3 py-3.5 font-extrabold text-right">Valuation</th>
+                    <th className="px-4 py-3.5 font-extrabold text-right">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/80 text-slate-300">
+                <tbody className="divide-y divide-slate-800/60">
                   {filteredItems.map((it) => {
                     const isLow = (it.available_quantity || 0) <= it.minimum_quantity;
                     const valuation = it.current_quantity * it.unit_cost;
                     return (
-                      <tr key={it.id} className="hover:bg-slate-800/50 transition-colors">
-                        <td className="p-3.5"><p className="font-bold text-white">{it.name}</p><p className="text-[10px] font-mono text-amber-400">{it.sku}</p></td>
-                        <td className="p-3.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${LABEL_BG[it.stock_label || 'Tools'] || 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>{it.stock_label || 'Tools'}</span></td>
-                        <td className="p-3.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${it.department === 'Kitchen' ? 'bg-orange-500/20 text-orange-300 border-orange-500/30' : it.department === 'Bar' ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' : it.department === 'Housekeeping' ? 'bg-sky-500/20 text-sky-300 border-sky-500/30' : it.department === 'Manager' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>{it.department || 'General'}</span></td>
-                        <td className="p-3.5">{it.category_name}</td>
-                        <td className="p-3.5 font-bold text-white">{it.current_quantity} {it.unit}</td>
-                        <td className="p-3.5 text-amber-400 font-medium">{it.reserved_quantity || 0} {it.unit}</td>
-                        <td className="p-3.5"><span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${isLow?'bg-rose-500/20 text-rose-300 border border-rose-500/30':'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'}`}>{it.available_quantity} {it.unit} {isLow && '(LOW)'}</span></td>
-                        <td className="p-3.5 font-mono text-slate-300">{formatCurrency(it.unit_cost)}</td>
-                        <td className="p-3.5 font-mono font-bold text-white">{formatCurrency(valuation)}</td>
-                        <td className="p-3.5 text-right">
+                      <tr key={it.id} className="group hover:bg-slate-800/40 transition-colors">
+                        <td className="px-4 py-4">
+                          <div className="min-w-[180px]">
+                            <p className="text-[13px] font-bold text-white leading-tight tracking-tight group-hover:text-amber-50 transition-colors line-clamp-1" title={it.name}>{it.name}</p>
+                            <p className="text-[10px] font-mono font-semibold tracking-wider text-amber-400/90 mt-1 bg-slate-800/50 inline-block px-1.5 py-0.5 rounded border border-slate-700/30">{it.sku}</p>
+                          </div>
+                        </td>
+                        <td className="px-3 py-4"><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wider border shadow-sm ${LABEL_BG[it.stock_label || 'Tools'] || 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>{it.stock_label || 'Tools'}</span></td>
+                        <td className="px-3 py-4"><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wide border ${it.department === 'Kitchen' ? 'bg-orange-500/15 text-orange-300 border-orange-500/25' : it.department === 'Bar' ? 'bg-purple-500/15 text-purple-300 border-purple-500/25' : it.department === 'Housekeeping' ? 'bg-sky-500/15 text-sky-300 border-sky-500/25' : it.department === 'Manager' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25' : 'bg-slate-700/50 text-slate-300 border-slate-600/50'}`}>{it.department || 'General'}</span></td>
+                        <td className="px-3 py-4"><span className="text-[12px] font-semibold text-slate-300 tracking-wide">{it.category_name}</span></td>
+                        <td className="px-3 py-4 text-right"><span className="text-[13px] font-black text-white font-mono tracking-tight">{it.current_quantity} <span className="text-[10px] font-bold text-slate-400 tracking-wider">{it.unit}</span></span></td>
+                        <td className="px-3 py-4 text-right"><span className="text-[12px] font-bold text-amber-400 font-mono">{it.reserved_quantity || 0} <span className="text-[10px] text-amber-300/60">{it.unit}</span></span></td>
+                        <td className="px-3 py-4 text-right"><span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-extrabold tracking-wide border shadow-sm ${isLow?'bg-rose-500 text-white border-rose-600 shadow-rose-500/20':'bg-emerald-500 text-white border-emerald-600 shadow-emerald-500/20'}`}><span className="w-1.5 h-1.5 rounded-full bg-white/90 animate-pulse" />{it.available_quantity} <span className="text-[10px] opacity-90">{it.unit}</span></span></td>
+                        <td className="px-3 py-4 text-right"><span className="text-[12px] font-bold text-slate-300 font-mono tracking-tight">{formatCurrency(it.unit_cost)}</span></td>
+                        <td className="px-3 py-4 text-right"><span className="text-[13px] font-black text-white font-mono tracking-tight">{formatCurrency(valuation)}</span></td>
+                        <td className="px-4 py-4">
                           <div className="flex items-center justify-end gap-1.5">
-                            {canReceiveStock(it) && (<button onClick={() => handleOpenAdjust(it)} className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg border border-emerald-500">Add Stock</button>)}
-                            {canEditItem(it) && (<button onClick={() => handleOpenEditItem(it)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700" title="Edit"><Pencil className="w-3.5 h-3.5"/></button>)}
-                            {canDeleteItem(it) && (<button onClick={() => handleDeleteItem(it)} className="p-1.5 bg-slate-800 hover:bg-rose-500/20 text-rose-400 rounded-lg border border-slate-700" title="Remove"><Trash2 className="w-3.5 h-3.5"/></button>)}
+                            {canReceiveStock(it) && (<button onClick={() => handleOpenAdjust(it)} className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-xs rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 tracking-wide">Add Stock</button>)}
+                            {canEditItem(it) && (<button onClick={() => handleOpenEditItem(it)} className="w-8 h-8 bg-slate-800 hover:bg-sky-500/15 text-slate-400 hover:text-sky-400 rounded-xl border border-slate-700 hover:border-sky-500/30 flex items-center justify-center transition-all" title="Edit item"><Pencil className="w-3.5 h-3.5"/></button>)}
+                            {canDeleteItem(it) && (<button onClick={() => handleDeleteItem(it)} className="w-8 h-8 bg-slate-800 hover:bg-rose-500/15 text-slate-400 hover:text-rose-400 rounded-xl border border-slate-700 hover:border-rose-500/30 flex items-center justify-center transition-all" title="Remove item"><Trash2 className="w-3.5 h-3.5"/></button>)}
                           </div>
                         </td>
                       </tr>
@@ -657,68 +662,121 @@ export const InventoryManager: React.FC = () => {
                 </tbody>
               </table>
             </div>
+            {filteredItems.length === 0 && (
+              <div className="p-12 text-center border-t border-slate-800">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center"><Search className="w-5 h-5 text-slate-500" /></div>
+                <p className="text-sm font-bold text-white">No Items Found</p>
+                <p className="text-xs text-slate-500 mt-1">Try adjusting your search or filters.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* LOW STOCK */}
+      {/* LOW STOCK - Professional Cards */}
       {activeTab === 'lowStock' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           {lowStockItems.map((it) => (
-            <div key={it.id} className="p-4 rounded-2xl bg-amber-950/20 border border-amber-500/30 shadow-xl flex flex-col justify-between">
-              <div>
-                <div className="flex items-start justify-between pb-2 border-b border-slate-800">
-                  <div><h4 className="text-sm font-bold text-white">{it.name}</h4><p className="text-[10px] font-mono text-amber-400">{it.sku} &bull; <span className={(LABEL_BG[it.stock_label || 'Tools'] || '') + ' px-1 rounded'}>{it.stock_label || 'Tools'}</span></p></div>
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">Below Threshold</span>
+            <div key={it.id} className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-amber-950/20 border border-amber-500/20 shadow-lg hover:shadow-xl hover:border-amber-500/30 transition-all duration-300 flex flex-col">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 to-orange-500 opacity-60 group-hover:opacity-100 transition-opacity" />
+              <div className="p-5 flex-1">
+                <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-800/80">
+                  <div className="flex-1 min-w-0">
+                    <h4 className="text-[14px] font-bold text-white leading-tight tracking-tight truncate" title={it.name}>{it.name}</h4>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-[10px] font-mono font-medium text-slate-400 bg-slate-800/60 px-2 py-0.5 rounded-md border border-slate-700/50">{it.sku}</span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border tracking-wide ${LABEL_BG[it.stock_label || 'Tools'] || 'bg-slate-500/20 text-slate-300 border-slate-500/30'}`}>{it.stock_label || 'Tools'}</span>
+                    </div>
+                  </div>
+                  <span className="shrink-0 px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wider bg-amber-500 text-slate-900 shadow-sm">LOW</span>
                 </div>
-                <div className="py-3 text-xs space-y-1.5">
-                  <div className="flex justify-between text-slate-300"><span>Available Stock:</span><span className="font-bold text-rose-400">{it.available_quantity} {it.unit}</span></div>
-                  <div className="flex justify-between text-slate-300"><span>Minimum Par Level:</span><span className="font-semibold text-white">{it.minimum_quantity} {it.unit}</span></div>
-                  <div className="flex justify-between text-slate-300"><span>Target Restock Qty:</span><span className="font-semibold text-emerald-400">{it.reorder_quantity} {it.unit}</span></div>
+                <div className="py-4 space-y-3">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-rose-500/20 flex items-center justify-center"><AlertTriangle className="w-3.5 h-3.5 text-rose-400" /></div>
+                      <span className="text-[11px] font-semibold text-slate-300 tracking-wide">Available</span>
+                    </div>
+                    <span className="text-[13px] font-black text-rose-400 font-mono tracking-tight">{it.available_quantity} <span className="text-[10px] font-semibold text-rose-300/80">{it.unit}</span></span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-[11px]">
+                    <div className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50">
+                      <p className="text-[10px] font-semibold text-slate-400 tracking-wider uppercase">Min Level</p>
+                      <p className="text-[13px] font-bold text-white font-mono mt-1">{it.minimum_quantity} <span className="text-[10px] text-slate-400">{it.unit}</span></p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                      <p className="text-[10px] font-semibold text-emerald-300/80 tracking-wider uppercase">Restock</p>
+                      <p className="text-[13px] font-bold text-emerald-400 font-mono mt-1">{it.reorder_quantity} <span className="text-[10px] text-emerald-300/70">{it.unit}</span></p>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="pt-3 border-t border-slate-800 flex justify-end">
-                {canReceiveStock(it) && (<button onClick={() => handleOpenAdjust(it)} className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow">Receive Stock</button>)}
+              <div className="px-5 py-3 bg-slate-950/40 border-t border-slate-800/60 flex items-center justify-between gap-3">
+                <p className="text-[10px] text-slate-500 font-medium leading-tight">Requires immediate attention</p>
+                {canReceiveStock(it) && (<button onClick={() => handleOpenAdjust(it)} className="shrink-0 px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-900 font-extrabold text-xs rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95 flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Add Stock</button>)}
               </div>
             </div>
           ))}
           {lowStockItems.length === 0 && (
-            <div className="col-span-full p-12 text-center text-slate-500 text-xs bg-slate-900/60 rounded-2xl border border-slate-800">
-              <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-emerald-400" />
-              All inventory levels are healthy and above minimum safety thresholds.
+            <div className="col-span-full p-12 text-center bg-gradient-to-br from-slate-900 to-emerald-950/10 rounded-2xl border border-slate-800 shadow-lg">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center"><CheckCircle2 className="w-7 h-7 text-emerald-400" /></div>
+              <h4 className="text-sm font-bold text-white">All Stock Levels Healthy</h4>
+              <p className="text-xs text-slate-400 mt-1.5 max-w-md mx-auto leading-relaxed">Every inventory item is above its minimum safety threshold. No immediate restocking required.</p>
             </div>
           )}
         </div>
       )}
 
-      {/* REQUESTS */}
+      {/* REQUESTS - Professional Cards */}
       {activeTab === 'requests' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {stockRequests.map((req) => (
-              <div key={req.id} className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl flex flex-col justify-between">
-                <div>
-                  <div className="flex items-start justify-between pb-2 border-b border-slate-800">
-                    <div><span className="text-xs font-mono font-bold text-amber-400">#{req.request_number}</span><h4 className="text-sm font-bold text-white">{req.department} Dept Request</h4></div>
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${req.status === 'Approved'?'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30': req.status === 'Pending'?'bg-amber-500/20 text-amber-300 border border-amber-500/30':'bg-rose-500/20 text-rose-300 border border-rose-500/30'}`}>{req.status}</span>
+              <div key={req.id} className="group relative overflow-hidden rounded-2xl bg-slate-900 border border-slate-800 shadow-lg hover:border-slate-700 hover:shadow-xl transition-all flex flex-col">
+                <div className={`absolute top-0 left-0 right-0 h-1 ${req.status === 'Approved' ? 'bg-emerald-500' : req.status === 'Pending' ? 'bg-amber-500' : 'bg-rose-500'} opacity-70 group-hover:opacity-100 transition-opacity`} />
+                <div className="p-5 flex-1">
+                  <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-800/80">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono font-bold tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">#{req.request_number}</span>
+                        <span className="text-[11px] font-semibold text-slate-500 tracking-wide uppercase">{req.department}</span>
+                      </div>
+                      <h4 className="text-[14px] font-bold text-white leading-tight tracking-tight mt-1.5 truncate" title={`${req.department} Dept Request`}>{req.department} Department Request</h4>
+                    </div>
+                    <span className={`shrink-0 px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-wider border ${req.status === 'Approved'?'bg-emerald-500 text-slate-900 border-emerald-500 shadow-sm': req.status === 'Pending'?'bg-amber-500 text-slate-900 border-amber-500 shadow-sm':'bg-rose-500 text-white border-rose-500'}`}>{req.status.toUpperCase()}</span>
                   </div>
-                  <div className="py-3 text-xs space-y-2">
-                    <p className="text-slate-300">Reason: <strong className="text-white">{req.reason || 'Restocking'}</strong></p>
-                    <div className="bg-slate-950/60 p-2.5 rounded-xl border border-slate-800 space-y-1">
-                      {req.items?.map((it: any) => (
-                        <div key={it.id} className="flex justify-between text-slate-300"><span>{it.item_name}</span><span className="font-bold text-amber-400">{it.quantity_requested} {it.unit}</span></div>
-                      ))}
+                  <div className="py-4 space-y-3">
+                    <div className="p-3 rounded-xl bg-slate-800/40 border border-slate-700/30">
+                      <p className="text-[10px] font-bold tracking-widest uppercase text-slate-400 mb-1">Reason</p>
+                      <p className="text-[13px] font-semibold text-white leading-relaxed line-clamp-2" title={req.reason || 'Restocking'}>{req.reason || 'Restocking'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold tracking-widest uppercase text-slate-400">Requested Items</p>
+                      <div className="space-y-1.5">
+                        {req.items?.map((it: any) => (
+                          <div key={it.id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/60 hover:bg-slate-900/60 transition-colors">
+                            <span className="text-[13px] font-semibold text-white leading-tight flex-1 min-w-0 truncate pr-3" title={it.item_name}>{it.item_name}</span>
+                            <span className="shrink-0 text-[12px] font-black text-amber-400 font-mono bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full">{it.quantity_requested} <span className="text-[10px] font-bold text-amber-300/70">{it.unit}</span></span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 </div>
                 {req.status === 'Pending' && canManage && (
-                  <div className="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
-                    <button onClick={() => handleRejectRequest(req.id)} className="px-3 py-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 text-xs font-semibold rounded-xl border border-rose-500/30">Reject</button>
-                    <button onClick={() => handleApproveRequest(req.id)} className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold rounded-xl shadow">Approve & Issue</button>
+                  <div className="px-5 py-3 bg-slate-950/40 border-t border-slate-800/60 flex items-center justify-end gap-2">
+                    <button onClick={() => handleRejectRequest(req.id)} className="px-4 py-2 bg-slate-800 hover:bg-rose-500/10 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-500/30 text-xs font-bold rounded-xl transition-colors">Reject</button>
+                    <button onClick={() => handleApproveRequest(req.id)} className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-extrabold text-xs rounded-xl shadow-md hover:shadow-lg transition-all active:scale-95">Approve & Issue</button>
                   </div>
                 )}
               </div>
             ))}
+            {stockRequests.length === 0 && (
+              <div className="col-span-full p-12 text-center bg-slate-900/60 rounded-2xl border border-slate-800">
+                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center"><FileCheck className="w-6 h-6 text-slate-400" /></div>
+                <p className="text-sm font-semibold text-white">No Stock Requests</p>
+                <p className="text-xs text-slate-500 mt-1">Department requests will appear here when submitted.</p>
+              </div>
+            )}
           </div>
         </div>
       )}
