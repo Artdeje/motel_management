@@ -25,7 +25,6 @@ import {
   Activity,
   Package,
   Wine,
-  UtensilsCrossed,
   Wrench,
   ClipboardList,
 } from 'lucide-react';
@@ -87,8 +86,8 @@ export const InventoryManager: React.FC = () => {
   // Modals
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [selectedItemForAdjust, setSelectedItemForAdjust] = useState<any | null>(null);
+  // Refill-only form: quantity is always added as a positive 'Received' movement.
   const [adjustForm, setAdjustForm] = useState({
-    transaction_type: 'Received',
     quantity: '',
     unit_cost: '',
     notes: '',
@@ -148,10 +147,9 @@ export const InventoryManager: React.FC = () => {
   const handleOpenAdjust = (item: any) => {
     setSelectedItemForAdjust(item);
     setAdjustForm({
-      transaction_type: 'Received',
-      quantity: '10',
-      unit_cost: String(item.unit_cost),
-      notes: 'Supplier stock replenishment',
+      quantity: '',
+      unit_cost: String(item.unit_cost ?? ''),
+      notes: '',
     });
     setShowAdjustModal(true);
   };
@@ -159,24 +157,25 @@ export const InventoryManager: React.FC = () => {
   const handleConfirmAdjust = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedItemForAdjust) return;
+    const qty = parseFloat(adjustForm.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) return error('Enter a refill quantity greater than zero');
     setSubmitting(true);
     try {
-      // Map UI type to backend type
-      const typeMap: Record<string,string> = { Received:'Received', Adjustment:'Adjustment', Waste:'Damaged', Usage:'Consumed' };
-      const backendType = typeMap[adjustForm.transaction_type] || adjustForm.transaction_type;
+      // Refill only: always a positive 'Received' movement. Other movement types
+      // (waste, audit correction, usage) are handled elsewhere, not on this form.
       await api.recordInventoryTransaction({
         item_id: selectedItemForAdjust.id,
-        transaction_type: backendType,
-        quantity: parseFloat(adjustForm.quantity),
-        unit_cost: parseFloat(adjustForm.unit_cost || '0'),
-        reason: adjustForm.notes || backendType,
+        transaction_type: 'Received',
+        quantity: qty,
+        unit_cost: parseFloat(adjustForm.unit_cost || String(selectedItemForAdjust.unit_cost || 0)),
+        reason: adjustForm.notes || 'Stock refill',
       });
-      success('Inventory Updated Successfully');
+      success('Stock Refilled', `Added ${qty} ${selectedItemForAdjust.unit} to ${selectedItemForAdjust.name}`);
       setShowAdjustModal(false);
       fetchInventory();
       fetchAnalytics(analyticsPeriod);
     } catch (err: any) {
-      error('Stock adjustment failed', err.message);
+      error('Stock refill failed', err.message);
     } finally {
       setSubmitting(false);
     }
@@ -362,7 +361,7 @@ export const InventoryManager: React.FC = () => {
     if (user?.role === 'bartender' && it.department === 'Bar') return true;
     return false;
   };
-  const visibleCategories = categories.filter(c => ['Drink','Food','Kitchen ingredient','Tools'].includes(c.name));
+  const visibleCategories = categories.filter(c => ['Drink','Kitchen ingredient','Tools'].includes(c.name));
 
   const handleDownloadPDF = () => {
     const el = document.getElementById('inventory-analytics-printable');
@@ -385,7 +384,6 @@ export const InventoryManager: React.FC = () => {
         td{padding:8px 10px;border-bottom:1px solid #f1f5f9;font-size:10px}
         .badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:9px;font-weight:800;border:1px solid}
         .bg-drink{background:#ede9fe;color:#6d28d9;border-color:#ddd6fe}
-        .bg-food{background:#d1fae5;color:#065f46;border-color:#a7f3d0}
         .bg-kitchen{background:#fef3c7;color:#92400e;border-color:#fde68a}
         .bg-tools{background:#ffedd5;color:#9a3412;border-color:#fed7aa}
         .footer{margin-top:20px;padding-top:10px;border-top:2px solid #0f172a;text-align:center;font-size:8px;color:#94a3b8}
@@ -643,7 +641,7 @@ export const InventoryManager: React.FC = () => {
                     <tbody className="divide-y divide-slate-800/60">
                       {analytics.labelBreakdown && Object.entries(analytics.labelBreakdown).map(([label, v]:any)=>(
                         <tr key={label} className="hover:bg-slate-800/30 transition-colors">
-                          <td className="px-4 lg:px-6 py-3.5 whitespace-nowrap"><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-extrabold tracking-wide border shadow-sm ${label.toLowerCase().includes('drink') ? 'bg-drink' : label.toLowerCase().includes('kitchen') ? 'bg-kitchen' : label.toLowerCase().includes('food') ? 'bg-food' : 'bg-tools'}`}>{label}</span></td>
+                          <td className="px-4 lg:px-6 py-3.5 whitespace-nowrap"><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-extrabold tracking-wide border shadow-sm ${label.toLowerCase().includes('drink') ? 'bg-drink' : label.toLowerCase().includes('kitchen') ? 'bg-kitchen' : 'bg-tools'}`}>{label}</span></td>
                           <td className="px-3 py-3.5 text-right font-mono font-bold text-white whitespace-nowrap">{Math.round(Number(v.count)).toLocaleString()}</td>
                           <td className="px-3 py-3.5 text-right font-mono font-bold text-white whitespace-nowrap">{Math.round(Number(v.currentQty)).toLocaleString()}</td>
                           <td className="px-3 py-3.5 text-right font-mono font-bold text-emerald-400 whitespace-nowrap">{formatCurrency(Math.round(Number(v.valuation)))}</td>
@@ -687,11 +685,10 @@ export const InventoryManager: React.FC = () => {
             </div>
             <div className="flex flex-wrap items-center gap-2 lg:gap-2.5">
               <span className="text-[10px] lg:text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 shrink-0"><ClipboardList className="w-3 h-3"/> Stock Category:</span>
-              {['all','Drink','Food','Kitchen ingredient','Tools'].map(l=>(
+              {['all','Drink','Kitchen ingredient','Tools'].map(l=>(
                 <button key={l} onClick={()=> setSelectedLabel(l)} className={`px-3 lg:px-3.5 py-1.5 lg:py-2 rounded-xl text-xs lg:text-sm font-semibold flex items-center gap-1.5 whitespace-nowrap transition-all ${selectedLabel===l?'bg-amber-500 text-slate-950 font-bold shadow-sm':'bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700/50'}`}>
                   {l==='Drink' && <Wine className="w-3 h-3"/>}
-                  {l==='Food' && <UtensilsCrossed className="w-3 h-3"/>}
-                  {l==='Kitchen ingredient' && <Layers className="w-3 h-3"/>}
+                                    {l==='Kitchen ingredient' && <Layers className="w-3 h-3"/>}
                   {l==='Tools' && <Wrench className="w-3 h-3"/>}
                   {l==='all'?'All':l}
                 </button>
@@ -948,18 +945,19 @@ export const InventoryManager: React.FC = () => {
       {showAdjustModal && selectedItemForAdjust && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-base font-bold text-white flex items-center gap-2"><Boxes className="w-5 h-5 text-amber-400"/>Adjust Stock: {selectedItemForAdjust.name}</h3>
+            <h3 className="text-base font-bold text-white flex items-center gap-2"><TrendingUp className="w-5 h-5 text-emerald-400"/>Refill Stock: {selectedItemForAdjust.name}</h3>
             <p className="text-xs text-slate-400 mt-1">Current Available: {selectedItemForAdjust.available_quantity} {selectedItemForAdjust.unit} &bull; Label: {selectedItemForAdjust.stock_label}</p>
             <form onSubmit={handleConfirmAdjust} className="mt-4 space-y-4">
-              <div><label className="block text-xs font-semibold text-slate-300 mb-1">Transaction Type</label><select value={adjustForm.transaction_type} onChange={(e) => setAdjustForm({ ...adjustForm, transaction_type: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"><option value="Received">Received / Purchase (+)</option><option value="Adjustment">Physical Audit Correction (+/-)</option><option value="Damaged">Damaged / Expired / Waste (-)</option><option value="Consumed">Manual Usage (-)</option></select></div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><label className="block text-xs font-semibold text-slate-300 mb-1">Quantity ({selectedItemForAdjust.unit})</label><input type="number" step="0.1" value={adjustForm.quantity} onChange={(e) => setAdjustForm({ ...adjustForm, quantity: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" required/></div>
-                <div><label className="block text-xs font-semibold text-slate-300 mb-1">Unit Cost ({CURRENCY_SYMBOL})</label><input type="number" step="0.01" value={adjustForm.unit_cost} onChange={(e) => setAdjustForm({ ...adjustForm, unit_cost: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" required/></div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Quantity to Refill ({selectedItemForAdjust.unit})</label>
+                <input type="number" min="0.1" step="0.1" value={adjustForm.quantity} onChange={(e) => setAdjustForm({ ...adjustForm, quantity: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" autoFocus required/>
+                <p className="text-[10px] text-slate-500 mt-1">New total after refill: <span className="font-bold text-emerald-300">{(Number(selectedItemForAdjust.available_quantity || 0) + (parseFloat(adjustForm.quantity) || 0)).toLocaleString()} {selectedItemForAdjust.unit}</span></p>
               </div>
-              <div><label className="block text-xs font-semibold text-slate-300 mb-1">Notes / Invoice Ref</label><input type="text" value={adjustForm.notes} onChange={(e) => setAdjustForm({ ...adjustForm, notes: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"/></div>
+              <div><label className="block text-xs font-semibold text-slate-300 mb-1">Unit Cost ({CURRENCY_SYMBOL}) <span className="text-slate-500 font-normal">– optional</span></label><input type="number" step="0.01" value={adjustForm.unit_cost} onChange={(e) => setAdjustForm({ ...adjustForm, unit_cost: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"/></div>
+              <div><label className="block text-xs font-semibold text-slate-300 mb-1">Notes / Invoice Ref <span className="text-slate-500 font-normal">– optional</span></label><input type="text" value={adjustForm.notes} onChange={(e) => setAdjustForm({ ...adjustForm, notes: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"/></div>
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
                 <button type="button" onClick={() => setShowAdjustModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white">Cancel</button>
-                <button type="submit" disabled={submitting} className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow disabled:opacity-50">{submitting ? 'Updating...' : 'Save Stock Update'}</button>
+                <button type="submit" disabled={submitting} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow disabled:opacity-50">{submitting ? 'Refilling...' : 'Refill Stock'}</button>
               </div>
             </form>
           </div>
@@ -971,7 +969,7 @@ export const InventoryManager: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-bold text-white flex items-center gap-2"><TrendingUp className="w-5 h-5 text-emerald-400"/> Add Stock – Refill</h3>
-            <p className="text-xs text-slate-400 mt-1">Select a stock material and refill it anytime. Stock categories: Drink, Food, Kitchen ingredient, Tools, Others.</p>
+            <p className="text-xs text-slate-400 mt-1">Select a stock material and refill it anytime. Stock categories: Drink, Kitchen ingredient, Tools.</p>
             <form onSubmit={handleAddStockGlobal} className="mt-4 space-y-4">
               <div><label className="block text-xs font-semibold text-slate-300 mb-1">Stock Material</label><select value={addStockForm.item_id} onChange={e=> { const it=items.find(x=>x.id===e.target.value); setAddStockForm({...addStockForm, item_id:e.target.value, unit_cost: it? String(it.unit_cost): ''}); }} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" required><option value="">Select stock material...</option>{items.map(it=> <option key={it.id} value={it.id}>{it.name} [{it.stock_label}] – {it.current_quantity} {it.unit} ({it.category_name})</option>)}</select></div>
               <div className="grid grid-cols-2 gap-3">

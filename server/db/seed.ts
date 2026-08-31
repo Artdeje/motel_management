@@ -126,11 +126,11 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       ]);
     }
 
-    // 7. Inventory Categories - Canonical live stock categories: Drink, Food, Kitchen ingredient, Tools (Others/Linen/Ingredient removed per request)
+    // 7. Inventory Categories - Canonical live stock categories: Drink, Kitchen ingredient, Tools
+    // (Food/Others/Linen/Ingredient retired; legacy rows kept below for FK safety only)
     const invCategories = [
       { id: 'cat-drink', name: 'Drink', description: 'Drink stock: beverages, juices, water, beer, wine, spirits (Stock Category: Drink)' },
-      { id: 'cat-food', name: 'Food', description: 'Food stock: prepared foods, snacks, staples (Stock Category: Food)' },
-      { id: 'cat-kitchen-ingredient', name: 'Kitchen ingredient', description: 'Kitchen ingredients: meats, poultry, dairy, produce, grains, spices, oils (Stock Category: Kitchen ingredient)' },
+      { id: 'cat-kitchen-ingredient', name: 'Kitchen ingredient', description: 'Kitchen ingredients: meats, poultry, dairy, produce, grains, spices, oils, prepared foods (Stock Category: Kitchen ingredient)' },
       { id: 'cat-tools-stock', name: 'Tools', description: 'Tools stock: cleaning supplies, amenities, maintenance spares (Stock Category: Tools)' },
       { id: 'cat-bar-stock', name: 'Bar', description: 'Bar stock (legacy -> Drink)' },
       { id: 'cat-kitchen-ing', name: 'Kitchen Ingredients', description: 'Kitchen Ingredients legacy -> Kitchen ingredient' },

@@ -4,22 +4,22 @@ import { authMiddleware, logAudit, requireRoles, createNotification } from '../m
 
 export const inventoryRouter = Router();
 
-// Helper: canonical stock categories - Drink, Food, Kitchen ingredient, Tools, Others
+// Helper: canonical stock categories - Drink, Kitchen ingredient, Tools
+// 'Food' was retired as a stock category: edible stock is all Kitchen ingredient.
+// Legacy Food/Foods rows still exist for FK safety and are folded in here.
 function getStockLabel(categoryName: string, department?: string): string {
   const n = (categoryName || '').toLowerCase();
   const d = (department || '').toLowerCase();
   if (n.includes('drink') || n.includes('bar') || n.includes('beverage') || n.includes('wine') || n.includes('beer') || n.includes('juice') || n.includes('water') || n.includes('soda') || d === 'bar') return 'Drink';
   if (n.includes('tool') || n.includes('clean') || n.includes('maintenance') || d === 'housekeeping') return 'Tools';
-  if (n.includes('kitchen') || n.includes('ingredient') || n.includes('spice') || n.includes('oil') || n.includes('produce') || n.includes('meat') || n.includes('poultry') || n.includes('dairy') || n.includes('grain')) return 'Kitchen ingredient';
-  if (n.includes('food') || d === 'kitchen') return 'Food';
+  if (n.includes('kitchen') || n.includes('ingredient') || n.includes('spice') || n.includes('oil') || n.includes('produce') || n.includes('meat') || n.includes('poultry') || n.includes('dairy') || n.includes('grain') || n.includes('food') || d === 'kitchen') return 'Kitchen ingredient';
   return 'Tools';
 }
 
 async function ensureStockLabels() {
   const labels = [
     { id: 'cat-drink', name: 'Drink', description: 'Drink stock: beverages, juices, water, beer, wine, spirits' },
-    { id: 'cat-food', name: 'Food', description: 'Food stock: prepared foods, snacks, staples' },
-    { id: 'cat-kitchen-ingredient', name: 'Kitchen ingredient', description: 'Kitchen ingredients: meats, poultry, dairy, produce, grains, spices, oils' },
+    { id: 'cat-kitchen-ingredient', name: 'Kitchen ingredient', description: 'Kitchen ingredients: meats, poultry, dairy, produce, grains, spices, oils, prepared foods' },
     { id: 'cat-tools-stock', name: 'Tools', description: 'Tools stock: cleaning supplies, amenities, maintenance spares' },
   ];
   for (const c of labels) {
@@ -28,7 +28,22 @@ async function ensureStockLabels() {
       try { await dbRun('INSERT INTO inventory_categories (id, name, description) VALUES (?, ?, ?)', [c.id, c.name, c.description]); } catch {}
     }
   }
-  // Hide removed categories (Linen, Others, Ingredient) from active selection - keep for FK but filter in UI
+
+  // 'Food' is retired as a stock category. Move any item still filed under a
+  // Food category over to Kitchen ingredient so nothing is orphaned or hidden.
+  // Idempotent: once migrated there is nothing left to match.
+  try {
+    const target = await dbGet<any>("SELECT id FROM inventory_categories WHERE name = 'Kitchen ingredient'");
+    if (target?.id) {
+      const foodCats = await dbAll<any>("SELECT id FROM inventory_categories WHERE name IN ('Food', 'Foods')");
+      for (const fc of foodCats) {
+        await dbRun('UPDATE inventory_items SET category_id = ? WHERE category_id = ?', [target.id, fc.id]);
+      }
+    }
+  } catch (e: any) {
+    console.error('[Inventory] Food -> Kitchen ingredient migration skipped:', e?.message || e);
+  }
+  // Hide removed categories (Food, Linen, Others, Ingredient) from active selection - keep for FK but filter in UI
 }
 
 // GET /api/inventory/analytics - Live stock analytics with period filter (24h/week/month/annual)
@@ -56,21 +71,26 @@ inventoryRouter.get('/inventory/analytics', authMiddleware, async (req: Request,
     let lowStockCount = 0, outOfStockCount = 0;
     const labelBreakdown: Record<string, { count: number; currentQty: number; valuation: number }> = {
       Drink: { count: 0, currentQty: 0, valuation: 0 },
-      Food: { count: 0, currentQty: 0, valuation: 0 },
       'Kitchen ingredient': { count: 0, currentQty: 0, valuation: 0 },
       Tools: { count: 0, currentQty: 0, valuation: 0 },
     };
     for (const it of allItems) {
-      const avail = (it.current_quantity - (it.reserved_quantity || 0));
-      totalCurrentQty += it.current_quantity;
-      totalValuation += it.current_quantity * (it.unit_cost || 0);
+      // Coerce: Postgres returns numeric columns as strings, so `+=` would
+      // concatenate and corrupt every total on this dashboard.
+      const cur = Number(it.current_quantity) || 0;
+      const reserved = Number(it.reserved_quantity) || 0;
+      const minimum = Number(it.minimum_quantity) || 0;
+      const cost = Number(it.unit_cost) || 0;
+      const avail = cur - reserved;
+      totalCurrentQty += cur;
+      totalValuation += cur * cost;
       if (avail <= 0) outOfStockCount++;
-      else if (avail <= it.minimum_quantity) lowStockCount++;
+      else if (avail <= minimum) lowStockCount++;
       const label = getStockLabel(it.category_name, it.department);
       if (!labelBreakdown[label]) labelBreakdown[label] = { count: 0, currentQty: 0, valuation: 0 };
       labelBreakdown[label].count++;
-      labelBreakdown[label].currentQty += it.current_quantity;
-      labelBreakdown[label].valuation += it.current_quantity * (it.unit_cost || 0);
+      labelBreakdown[label].currentQty += cur;
+      labelBreakdown[label].valuation += cur * cost;
     }
 
     // Every stock (total ever received) vs current stock via transactions
@@ -160,16 +180,22 @@ inventoryRouter.get('/inventory/items', authMiddleware, async (req: Request, res
   await ensureStockLabels();
 
   const enriched = items.map((item) => {
-    const available = item.current_quantity - (item.reserved_quantity || 0);
+    // Postgres hands back numeric columns as strings — coerce before any
+    // arithmetic, otherwise `+` concatenates instead of adding.
+    const current = Number(item.current_quantity) || 0;
+    const reserved = Number(item.reserved_quantity) || 0;
+    const minimum = Number(item.minimum_quantity) || 0;
+    const reorder = Number(item.reorder_quantity) || 0;
+    const available = current - reserved;
     let stock_status = 'In Stock';
     if (available <= 0) {
       stock_status = 'Out of Stock';
-    } else if (available <= item.minimum_quantity * 0.5) {
+    } else if (available <= minimum * 0.5) {
       stock_status = 'Critical Stock';
-    } else if (available <= item.minimum_quantity) {
+    } else if (available <= minimum) {
       stock_status = 'Low Stock';
     }
-    const recommended_reorder = Math.max(0, item.reorder_quantity + (item.minimum_quantity - available));
+    const recommended_reorder = Math.max(0, reorder + (minimum - available));
     const stock_label = getStockLabel(item.category_name, item.department);
     return {
       ...item,
@@ -323,7 +349,16 @@ inventoryRouter.post('/inventory/transactions', authMiddleware, async (req: Requ
   }
 
   const qty = parseFloat(quantity);
-  const prevQty = item.current_quantity;
+  if (!Number.isFinite(qty) || qty <= 0) {
+    return res.status(400).json({ error: 'Quantity must be a number greater than zero' });
+  }
+
+  // Postgres returns numeric/decimal columns as STRINGS. Without this coercion
+  // `prevQty + qty` concatenates instead of adding ("37.00" + 15 -> "37.0015"),
+  // which silently corrupted every stock refill. Subtraction coerced already,
+  // so only Received/Returned were affected.
+  const prevQty = Number(item.current_quantity) || 0;
+  const minQty = Number(item.minimum_quantity) || 0;
   let newQty = prevQty;
 
   if (['Received', 'Returned'].includes(transaction_type)) {
@@ -337,7 +372,7 @@ inventoryRouter.post('/inventory/transactions', authMiddleware, async (req: Requ
     newQty = qty;
   }
 
-  const cost = unit_cost ? parseFloat(unit_cost) : item.unit_cost;
+  const cost = unit_cost ? parseFloat(unit_cost) : Number(item.unit_cost) || 0;
   const totalCost = cost * Math.abs(newQty - prevQty);
 
   await dbTransaction(async () => {
@@ -353,11 +388,11 @@ inventoryRouter.post('/inventory/transactions', authMiddleware, async (req: Requ
     );
 
     // If stock is below min, create notification
-    if (newQty <= item.minimum_quantity) {
+    if (newQty <= minQty) {
       await createNotification(
         'low_stock',
         `Low Stock: ${item.name}`,
-        `${item.name} is now at ${newQty} ${item.unit} (Min: ${item.minimum_quantity} ${item.unit})`,
+        `${item.name} is now at ${newQty} ${item.unit} (Min: ${minQty} ${item.unit})`,
         'manager',
         null,
         '/inventory'
