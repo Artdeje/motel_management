@@ -126,24 +126,20 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       ]);
     }
 
-    // 7. Inventory Categories - Canonical live stock categories: Drink, Food, Kitchen ingredient, Tools, Others + legacy
+    // 7. Inventory Categories - Canonical live stock categories: Drink, Food, Kitchen ingredient, Tools (Others/Linen/Ingredient removed per request)
     const invCategories = [
       { id: 'cat-drink', name: 'Drink', description: 'Drink stock: beverages, juices, water, beer, wine, spirits (Stock Category: Drink)' },
       { id: 'cat-food', name: 'Food', description: 'Food stock: prepared foods, snacks, staples (Stock Category: Food)' },
       { id: 'cat-kitchen-ingredient', name: 'Kitchen ingredient', description: 'Kitchen ingredients: meats, poultry, dairy, produce, grains, spices, oils (Stock Category: Kitchen ingredient)' },
-      { id: 'cat-tools-stock', name: 'Tools', description: 'Tools stock: cleaning supplies, linen, amenities, maintenance spares (Stock Category: Tools)' },
-      { id: 'cat-others-stock', name: 'Others', description: 'Other stock: general supplies, electronics, spares (Stock Category: Others)' },
+      { id: 'cat-tools-stock', name: 'Tools', description: 'Tools stock: cleaning supplies, amenities, maintenance spares (Stock Category: Tools)' },
       { id: 'cat-bar-stock', name: 'Bar', description: 'Bar stock (legacy -> Drink)' },
       { id: 'cat-kitchen-ing', name: 'Kitchen Ingredients', description: 'Kitchen Ingredients legacy -> Kitchen ingredient' },
       { id: 'cat-drinks', name: 'Drinks', description: 'Beverages legacy -> Drink' },
       { id: 'cat-foods', name: 'Foods', description: 'Prepared foods legacy -> Food' },
-      { id: 'cat-ingredients', name: 'Ingredients', description: 'Raw ingredients legacy -> Kitchen ingredient' },
       { id: 'cat-tools', name: 'Tools', description: 'Cleaning supplies legacy -> Tools' },
       { id: 'cat-clean', name: 'Cleaning Supplies', description: 'Detergents, disinfectants, mops, sanitizers, amenities' },
-      { id: 'cat-linen', name: 'Linen', description: 'Bed sheets, duvet covers, pillowcases, bath towels, bathrobes' },
       { id: 'cat-kitchen', name: 'Kitchen Ingredients', description: 'Fresh meats, poultry, dairy, produce, grains, spices, oils' },
       { id: 'cat-bar', name: 'Bar/Drinks', description: 'Juices, bottled water, sodas, beer, wine, spirits' },
-      { id: 'cat-other', name: 'Other', description: 'Office supplies, guest room electronics, maintenance spares' },
     ];
 
     for (const ic of invCategories) {

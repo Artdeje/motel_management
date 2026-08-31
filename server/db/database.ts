@@ -140,7 +140,8 @@ function translateSql(sql: string, paramsLengthHint?: number): string {
   // 4. CURDATE() -> CURRENT_DATE
   out = out.replace(/CURDATE\s*\(\s*\)/gi, "CURRENT_DATE");
 
-  // 5. DATE_FORMAT -> TO_CHAR
+  // 5. DATE_FORMAT -> TO_CHAR (generic + specific)
+  // Specific cases first
   out = out.replace(
     /DATE_FORMAT\s*\(\s*p\.payment_date\s*,\s*'%Y-%m'\s*\)/gi,
     "TO_CHAR(p.payment_date, 'YYYY-MM')",
@@ -168,6 +169,31 @@ function translateSql(sql: string, paramsLengthHint?: number): string {
   out = out.replace(
     /DATE_FORMAT\s*\(\s*ci\.check_in_time\s*,\s*'%Y-%m-%d'\s*\)/gi,
     "TO_CHAR(ci.check_in_time, 'YYYY-MM-DD')",
+  );
+  // Generic fallback for any DATE_FORMAT(col, '%Y-%m-%d') etc - covers inventory analytics created_at
+  out = out.replace(
+    /DATE_FORMAT\s*\(\s*([a-zA-Z0-9_\.]+)\s*,\s*'%Y-%m-%d'\s*\)/gi,
+    "TO_CHAR($1, 'YYYY-MM-DD')",
+  );
+  out = out.replace(
+    /DATE_FORMAT\s*\(\s*([a-zA-Z0-9_\.]+)\s*,\s*'%Y-%m'\s*\)/gi,
+    "TO_CHAR($1, 'YYYY-MM')",
+  );
+  out = out.replace(
+    /DATE_FORMAT\s*\(\s*([a-zA-Z0-9_\.]+)\s*,\s*'%b %Y'\s*\)/gi,
+    "TO_CHAR($1, 'Mon YYYY')",
+  );
+  out = out.replace(
+    /DATE_FORMAT\s*\(\s*([a-zA-Z0-9_\.]+)\s*,\s*'%Y'\s*\)/gi,
+    "TO_CHAR($1, 'YYYY')",
+  );
+  out = out.replace(
+    /DATE_FORMAT\s*\(\s*([a-zA-Z0-9_\.]+)\s*,\s*'%b %d'\s*\)/gi,
+    "TO_CHAR($1, 'Mon DD')",
+  );
+  out = out.replace(
+    /DATE_FORMAT\s*\(\s*([a-zA-Z0-9_\.]+)\s*,\s*'%H:00'\s*\)/gi,
+    "TO_CHAR($1, 'HH24:00')",
   );
 
   // 6. DATE(col) = ? -> col::date = ?

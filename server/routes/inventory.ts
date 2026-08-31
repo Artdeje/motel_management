@@ -9,10 +9,10 @@ function getStockLabel(categoryName: string, department?: string): string {
   const n = (categoryName || '').toLowerCase();
   const d = (department || '').toLowerCase();
   if (n.includes('drink') || n.includes('bar') || n.includes('beverage') || n.includes('wine') || n.includes('beer') || n.includes('juice') || n.includes('water') || n.includes('soda') || d === 'bar') return 'Drink';
-  if (n.includes('tool') || n.includes('clean') || n.includes('linen') || n.includes('maintenance') || d === 'housekeeping') return 'Tools';
+  if (n.includes('tool') || n.includes('clean') || n.includes('maintenance') || d === 'housekeeping') return 'Tools';
   if (n.includes('kitchen') || n.includes('ingredient') || n.includes('spice') || n.includes('oil') || n.includes('produce') || n.includes('meat') || n.includes('poultry') || n.includes('dairy') || n.includes('grain')) return 'Kitchen ingredient';
   if (n.includes('food') || d === 'kitchen') return 'Food';
-  return 'Others';
+  return 'Tools';
 }
 
 async function ensureStockLabels() {
@@ -20,8 +20,7 @@ async function ensureStockLabels() {
     { id: 'cat-drink', name: 'Drink', description: 'Drink stock: beverages, juices, water, beer, wine, spirits' },
     { id: 'cat-food', name: 'Food', description: 'Food stock: prepared foods, snacks, staples' },
     { id: 'cat-kitchen-ingredient', name: 'Kitchen ingredient', description: 'Kitchen ingredients: meats, poultry, dairy, produce, grains, spices, oils' },
-    { id: 'cat-tools-stock', name: 'Tools', description: 'Tools stock: cleaning supplies, linen, amenities, maintenance spares' },
-    { id: 'cat-others-stock', name: 'Others', description: 'Other stock: general supplies, electronics, spares' },
+    { id: 'cat-tools-stock', name: 'Tools', description: 'Tools stock: cleaning supplies, amenities, maintenance spares' },
   ];
   for (const c of labels) {
     const exists = await dbGet<any>('SELECT id FROM inventory_categories WHERE id = ? OR name = ?', [c.id, c.name]);
@@ -29,6 +28,7 @@ async function ensureStockLabels() {
       try { await dbRun('INSERT INTO inventory_categories (id, name, description) VALUES (?, ?, ?)', [c.id, c.name, c.description]); } catch {}
     }
   }
+  // Hide removed categories (Linen, Others, Ingredient) from active selection - keep for FK but filter in UI
 }
 
 // GET /api/inventory/analytics - Live stock analytics with period filter (24h/week/month/annual)
@@ -59,7 +59,6 @@ inventoryRouter.get('/inventory/analytics', authMiddleware, async (req: Request,
       Food: { count: 0, currentQty: 0, valuation: 0 },
       'Kitchen ingredient': { count: 0, currentQty: 0, valuation: 0 },
       Tools: { count: 0, currentQty: 0, valuation: 0 },
-      Others: { count: 0, currentQty: 0, valuation: 0 },
     };
     for (const it of allItems) {
       const avail = (it.current_quantity - (it.reserved_quantity || 0));
