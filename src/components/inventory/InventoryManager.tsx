@@ -37,13 +37,17 @@ import {
 } from 'recharts';
 
 const LABEL_COLORS: Record<string, string> = {
-  Bar: '#a78bfa',
-  'Kitchen Ingredients': '#fbbf24',
+  Drink: '#a78bfa',
+  Food: '#34d399',
+  'Kitchen ingredient': '#fbbf24',
+  Tools: '#f97316',
   Others: '#38bdf8',
 };
 const LABEL_BG: Record<string, string> = {
-  Bar: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-  'Kitchen Ingredients': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  Drink: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+  Food: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+  'Kitchen ingredient': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  Tools: 'bg-orange-500/20 text-orange-300 border-orange-500/30',
   Others: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
 };
 
@@ -91,6 +95,9 @@ export const InventoryManager: React.FC = () => {
     unit_cost: '',
     notes: '',
   });
+  const [showAddStockModal, setShowAddStockModal] = useState(false);
+  const [addStockForm, setAddStockForm] = useState({ item_id: '', quantity: '10', unit_cost: '', notes: 'Refill' });
+  const [stockListPeriod, setStockListPeriod] = useState<'all' | '24h' | 'week' | 'month' | 'annual'>('all');
 
   const [showRequestModal, setShowRequestModal] = useState(false);
   const [requestForm, setRequestForm] = useState({
@@ -175,6 +182,28 @@ export const InventoryManager: React.FC = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleAddStockGlobal = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addStockForm.item_id) return error('Select a stock item');
+    setSubmitting(true);
+    try {
+      const item = items.find(i=>i.id===addStockForm.item_id);
+      await api.recordInventoryTransaction({
+        item_id: addStockForm.item_id,
+        transaction_type: 'Received',
+        quantity: parseFloat(addStockForm.quantity),
+        unit_cost: parseFloat(addStockForm.unit_cost || String(item?.unit_cost || 0)),
+        reason: addStockForm.notes || 'Refill via Add Stock',
+      });
+      success('Stock Refilled', `Added ${addStockForm.quantity} to ${item?.name}`);
+      setShowAddStockModal(false);
+      setAddStockForm({ item_id: '', quantity: '10', unit_cost: '', notes: 'Refill' });
+      fetchInventory();
+      fetchAnalytics(analyticsPeriod);
+    } catch(err:any){ error('Add stock failed', err.message); }
+    finally{ setSubmitting(false); }
   };
 
   const handleOpenAddItem = () => {
@@ -298,7 +327,20 @@ export const InventoryManager: React.FC = () => {
     const matchCat = selectedCategory === 'all' || it.category_id === selectedCategory;
     const matchLabel = selectedLabel === 'all' || (it.stock_label || '').toLowerCase() === selectedLabel.toLowerCase();
     const matchSearch = it.name.toLowerCase().includes(searchQuery.toLowerCase()) || it.sku.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchDept && matchCat && matchLabel && matchSearch;
+    let matchPeriod = true;
+    if (stockListPeriod !== 'all') {
+      const raw = it.updated_at || it.created_at;
+      if (raw) {
+        const d = new Date(raw);
+        const now = new Date();
+        const diffDays = (now.getTime() - d.getTime()) / (1000*60*60*24);
+        if (stockListPeriod==='24h' && diffDays>1) matchPeriod=false;
+        else if (stockListPeriod==='week' && diffDays>7) matchPeriod=false;
+        else if (stockListPeriod==='month' && diffDays>30) matchPeriod=false;
+        else if (stockListPeriod==='annual' && diffDays>365) matchPeriod=false;
+      }
+    }
+    return matchDept && matchCat && matchLabel && matchSearch && matchPeriod;
   });
 
   const canManage = user?.role === 'admin' || user?.role === 'manager';
@@ -343,8 +385,10 @@ export const InventoryManager: React.FC = () => {
         th{tex-align:left;padding:8px 10px;background:#0f172a;color:#fff;font-size:9px;text-transform:uppercase;letter-spacing:.05em}
         td{padding:8px 10px;border-bottom:1px solid #f1f5f9;font-size:10px}
         .badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:9px;font-weight:800;border:1px solid}
-        .bg-bar{background:#ede9fe;color:#6d28d9;border-color:#ddd6fe}
+        .bg-drink{background:#ede9fe;color:#6d28d9;border-color:#ddd6fe}
+        .bg-food{background:#d1fae5;color:#065f46;border-color:#a7f3d0}
         .bg-kitchen{background:#fef3c7;color:#92400e;border-color:#fde68a}
+        .bg-tools{background:#ffedd5;color:#9a3412;border-color:#fed7aa}
         .bg-others{background:#e0f2fe;color:#0c4a6e;border-color:#bae6fd}
         .footer{margin-top:20px;padding-top:10px;border-top:2px solid #0f172a;text-align:center;font-size:8px;color:#94a3b8}
       </style></head><body>` + el.innerHTML + `</body></html>`);
@@ -373,6 +417,9 @@ export const InventoryManager: React.FC = () => {
               <Plus className="w-3.5 h-3.5" /> Add Item
             </button>
           )}
+          <button onClick={()=> setShowAddStockModal(true)} className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5">
+            <TrendingUp className="w-3.5 h-3.5"/> Add Stock
+          </button>
           <button onClick={()=>{fetchInventory(); fetchAnalytics(analyticsPeriod);}} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5">
             <RefreshCw className="w-3.5 h-3.5"/> Refresh
           </button>
@@ -509,7 +556,7 @@ export const InventoryManager: React.FC = () => {
                   <tbody>
                     {analytics.labelBreakdown && Object.entries(analytics.labelBreakdown).map(([label, v]:any)=>(
                       <tr key={label}>
-                        <td><span className={`badge ${label.toLowerCase().includes('bar') ? 'bg-bar' : label.toLowerCase().includes('kitchen') ? 'bg-kitchen' : 'bg-others'}`}>{label}</span></td>
+                        <td><span className={`badge ${label.toLowerCase().includes('drink') ? 'bg-drink' : label.toLowerCase().includes('kitchen') ? 'bg-kitchen' : label.toLowerCase().includes('food') ? 'bg-food' : label.toLowerCase().includes('tool') ? 'bg-tools' : 'bg-others'}`}>{label}</span></td>
                         <td className="font-mono font-bold">{v.count}</td>
                         <td className="font-mono">{v.currentQty.toLocaleString()}</td>
                         <td className="font-mono">{formatCurrency(v.valuation)}</td>
@@ -542,14 +589,22 @@ export const InventoryManager: React.FC = () => {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1"><ClipboardList className="w-3 h-3"/> Category:</span>
-              {['all','Bar','Kitchen Ingredients','Others'].map(l=>(
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1"><ClipboardList className="w-3 h-3"/> Stock Category:</span>
+              {['all','Drink','Food','Kitchen ingredient','Tools','Others'].map(l=>(
                 <button key={l} onClick={()=> setSelectedLabel(l)} className={`px-3 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 ${selectedLabel===l?'bg-amber-500 text-slate-950 font-bold':'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
-                  {l==='Bar' && <Wine className="w-3 h-3"/>}
-                  {l==='Kitchen Ingredients' && <UtensilsCrossed className="w-3 h-3"/>}
-                  {l==='Others' && <Wrench className="w-3 h-3"/>}
-                  {l==='all'?'All Categories':l}
+                  {l==='Drink' && <Wine className="w-3 h-3"/>}
+                  {l==='Food' && <UtensilsCrossed className="w-3 h-3"/>}
+                  {l==='Kitchen ingredient' && <Layers className="w-3 h-3"/>}
+                  {l==='Tools' && <Wrench className="w-3 h-3"/>}
+                  {l==='Others' && <Boxes className="w-3 h-3"/>}
+                  {l==='all'?'All':l}
                 </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1"><Filter className="w-3 h-3"/> Period:</span>
+              {(['all','24h','week','month','annual'] as const).map(p=>(
+                <button key={p} onClick={()=> setStockListPeriod(p)} className={`px-3 py-1 rounded-xl text-xs font-semibold ${stockListPeriod===p?'bg-sky-500 text-white font-bold':'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>{p==='all'?'All Time': p==='24h'?'24 Hours': p.charAt(0).toUpperCase()+p.slice(1)}</button>
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -594,7 +649,7 @@ export const InventoryManager: React.FC = () => {
                         <td className="p-3.5 font-mono font-bold text-white">{formatCurrency(valuation)}</td>
                         <td className="p-3.5 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {canReceiveStock(it) && (<button onClick={() => handleOpenAdjust(it)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-amber-400 font-semibold text-xs rounded-lg border border-slate-700">Receive / Adjust</button>)}
+                            {canReceiveStock(it) && (<button onClick={() => handleOpenAdjust(it)} className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg border border-emerald-500">Add Stock</button>)}
                             {canEditItem(it) && (<button onClick={() => handleOpenEditItem(it)} className="p-1.5 bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg border border-slate-700" title="Edit"><Pencil className="w-3.5 h-3.5"/></button>)}
                             {canDeleteItem(it) && (<button onClick={() => handleDeleteItem(it)} className="p-1.5 bg-slate-800 hover:bg-rose-500/20 text-rose-400 rounded-lg border border-slate-700" title="Remove"><Trash2 className="w-3.5 h-3.5"/></button>)}
                           </div>
@@ -750,6 +805,28 @@ export const InventoryManager: React.FC = () => {
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
                 <button type="button" onClick={() => setShowAdjustModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white">Cancel</button>
                 <button type="submit" disabled={submitting} className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow disabled:opacity-50">{submitting ? 'Updating...' : 'Save Stock Update'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add Stock (Refill) Modal – global */}
+      {showAddStockModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-base font-bold text-white flex items-center gap-2"><TrendingUp className="w-5 h-5 text-emerald-400"/> Add Stock – Refill</h3>
+            <p className="text-xs text-slate-400 mt-1">Select a stock material and refill it anytime. Stock categories: Drink, Food, Kitchen ingredient, Tools, Others.</p>
+            <form onSubmit={handleAddStockGlobal} className="mt-4 space-y-4">
+              <div><label className="block text-xs font-semibold text-slate-300 mb-1">Stock Material</label><select value={addStockForm.item_id} onChange={e=> { const it=items.find(x=>x.id===e.target.value); setAddStockForm({...addStockForm, item_id:e.target.value, unit_cost: it? String(it.unit_cost): ''}); }} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" required><option value="">Select stock material...</option>{items.map(it=> <option key={it.id} value={it.id}>{it.name} [{it.stock_label}] – {it.current_quantity} {it.unit} ({it.category_name})</option>)}</select></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="block text-xs font-semibold text-slate-300 mb-1">Quantity to Add</label><input type="number" min="0.1" step="0.1" value={addStockForm.quantity} onChange={e=> setAddStockForm({...addStockForm, quantity:e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" required/></div>
+                <div><label className="block text-xs font-semibold text-slate-300 mb-1">Unit Cost ({CURRENCY_SYMBOL})</label><input type="number" step="0.01" value={addStockForm.unit_cost} onChange={e=> setAddStockForm({...addStockForm, unit_cost:e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"/></div>
+              </div>
+              <div><label className="block text-xs font-semibold text-slate-300 mb-1">Notes</label><input type="text" placeholder="e.g. Delivery from supplier" value={addStockForm.notes} onChange={e=> setAddStockForm({...addStockForm, notes:e.target.value})} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"/></div>
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button type="button" onClick={()=> setShowAddStockModal(false)} className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white">Cancel</button>
+                <button type="submit" disabled={submitting} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow disabled:opacity-50">{submitting?'Adding...':'Add Stock'}</button>
               </div>
             </form>
           </div>

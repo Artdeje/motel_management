@@ -414,11 +414,11 @@ export const KitchenMenuControl: React.FC = () => {
                       <Edit2 className="w-4 h-4" />
                     </button>
                   )}
-                  {!isChef && (
+                  {(user?.role === 'admin' || user?.role === 'manager') && (
                     <button
                       onClick={() => openDeleteItem(item)}
                       className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition-colors"
-                      title="Drop menu item"
+                      title="Drop menu item (manager/admin only)"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
