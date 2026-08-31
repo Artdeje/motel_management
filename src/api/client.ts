@@ -190,6 +190,7 @@ export const api = {
   createPayment: (payment: any) => request('/api/finance/payments', { method: 'POST', body: JSON.stringify(payment) }),
   getExpenses: () => request('/api/finance/expenses'),
   createExpense: (expense: any) => request('/api/finance/expenses', { method: 'POST', body: JSON.stringify(expense) }),
+  clearRoomRevenues: () => request('/api/finance/room-revenues', { method: 'DELETE' }),
 
   // Reports
   getReportsSummary: (period?: any) => {

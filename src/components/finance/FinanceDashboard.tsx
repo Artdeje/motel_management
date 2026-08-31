@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useCms } from '../../context/CmsContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   DollarSign,
   TrendingUp,
@@ -14,7 +15,8 @@ import {
   Filter,
   RefreshCw,
   PieChart,
-  Download
+  Download,
+  Trash2
 } from 'lucide-react';
 import { formatCurrency, CURRENCY_SYMBOL } from '../../utils/currency';
 import { todayCAT, formatDateCAT } from '../../utils/dates';
@@ -22,12 +24,14 @@ import { todayCAT, formatDateCAT } from '../../utils/dates';
 export const FinanceDashboard: React.FC = () => {
   const { getSetting } = useCms();
   const { success, error } = useToast();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<any>(null);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [payments, setPayments] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'expenses' | 'payments'>('overview');
+  const [cleaning, setCleaning] = useState(false);
 
   // Finance trend for real expense breakdown
   const [financeTrend, setFinanceTrend] = useState<any>(null);
@@ -95,6 +99,25 @@ export const FinanceDashboard: React.FC = () => {
       error('Failed to record expense', err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCleanRoomRevenues = async () => {
+    if (!window.confirm('Clean ALL Room revenues? This will delete all Room/Deposit payments and all invoices (room folios) permanently. Food/Bar revenues will be kept. This cannot be undone.')) return;
+    const confirmText = window.prompt('Type ROOM to confirm cleaning all Room revenues:');
+    if (confirmText !== 'ROOM') {
+      if (confirmText !== null) error('Cancelled', 'Type ROOM exactly to confirm');
+      return;
+    }
+    setCleaning(true);
+    try {
+      const res:any = await api.clearRoomRevenues();
+      success(res.message || 'Room revenues cleaned');
+      fetchFinanceData();
+    } catch (err:any) {
+      error('Cleanup failed', err.message);
+    } finally {
+      setCleaning(false);
     }
   };
 
@@ -269,6 +292,16 @@ export const FinanceDashboard: React.FC = () => {
           >
             <Download className="w-4 h-4" /> Download PDF Report
           </button>
+          {user?.role === 'admin' && (
+            <button
+              onClick={handleCleanRoomRevenues}
+              disabled={cleaning}
+              className="px-4 py-2 bg-rose-600/20 hover:bg-rose-600/30 text-rose-300 font-semibold text-xs rounded-xl border border-rose-500/30 flex items-center gap-2 transition-colors disabled:opacity-50"
+              title="Clean all Room revenues (admin only)"
+            >
+              <Trash2 className="w-4 h-4" /> {cleaning ? 'Cleaning...' : 'Clean Room Revenues'}
+            </button>
+          )}
           <button
             onClick={() => setShowExpenseModal(true)}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 flex items-center gap-2 transition-transform active:scale-95"

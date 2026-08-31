@@ -236,6 +236,31 @@ financeRouter.get('/finance/expenses', authMiddleware, requireRoles(['admin', 'm
   return res.json({ expenses });
 });
 
+// DELETE /api/finance/room-revenues - Admin: clean up all Room revenues (payments + invoices)
+financeRouter.delete('/finance/room-revenues', authMiddleware, requireRoles(['admin']), async (req: Request, res: Response) => {
+  try {
+    const countPayments = (await dbGet<any>(`SELECT COUNT(*) as cnt FROM payments WHERE payment_category IN ('Room','Deposit')`))?.cnt || 0;
+    const countInvoices = (await dbGet<any>(`SELECT COUNT(*) as cnt FROM invoices`))?.cnt || 0;
+    const countInvoiceItems = (await dbGet<any>(`SELECT COUNT(*) as cnt FROM invoice_items`))?.cnt || 0;
+
+    await dbTransaction(async () => {
+      // Delete Room/Deposit payments
+      await dbRun(`DELETE FROM payments WHERE payment_category IN ('Room','Deposit')`);
+      // Delete invoice items and invoices (all invoices are room folios)
+      await dbRun(`DELETE FROM invoice_items`);
+      await dbRun(`DELETE FROM invoices`);
+      // Reset any remaining invoice-linked payments to avoid orphans (already deleted above)
+      // Optionally keep non-room payments (Food, Drinks etc) intact
+    });
+
+    await logAudit(req.user, 'Finance', 'Room Revenue Cleanup', null, `Admin ${req.user?.username} cleaned Room revenues: ${countPayments} payments, ${countInvoices} invoices, ${countInvoiceItems} invoice_items`, req.ip);
+    return res.json({ message: `Room revenues cleaned (${countPayments} payments, ${countInvoices} invoices, ${countInvoiceItems} items)`, deleted: { payments: countPayments, invoices: countInvoices, invoice_items: countInvoiceItems } });
+  } catch (err:any) {
+    console.error('Room revenue cleanup error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to clean Room revenues' });
+  }
+});
+
 // POST /api/finance/expenses
 financeRouter.post('/finance/expenses', authMiddleware, requireRoles(['admin', 'manager']), async (req: Request, res: Response) => {
   const { category, title, amount, payment_method, supplier_id, paid_to, expense_date, receipt_reference, notes } = req.body;
