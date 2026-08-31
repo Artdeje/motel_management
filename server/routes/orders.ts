@@ -555,8 +555,10 @@ ordersRouter.put('/orders/:id/status', authMiddleware, requireRoles(['admin', 'm
 // DELETE /api/orders - Admin: empty all order history (bulk clear) - optimized
 ordersRouter.delete('/orders', authMiddleware, requireRoles(['admin']), async (req: Request, res: Response) => {
   try {
+    // Postgres returns COUNT(*) as a bigint, which the driver hands back as a
+    // string — coerce so the reported figure is a real number.
     const countRow = await dbGet<any>('SELECT COUNT(*) as cnt FROM orders');
-    const total = countRow?.cnt || 0;
+    const total = Number(countRow?.cnt) || 0;
     await dbTransaction(async () => {
       // Fast release: reset all reserved stock (all pending reservations are cleared with orders)
       await dbRun('UPDATE inventory_items SET reserved_quantity = 0 WHERE reserved_quantity > 0');
