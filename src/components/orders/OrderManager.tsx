@@ -28,6 +28,10 @@ import { formatTimeCAT, formatDateTimeCAT } from '../../utils/dates';
 
 export const OrderManager: React.FC = () => {
   const { user } = useAuth();
+  // Bartenders place orders but do not drive them. The API only lets them
+  // cancel (status) and blocks payment entirely (admin/manager), so every
+  // action button here would 403 — they get a read-only view of status.
+  const canAct = user?.role !== 'bartender';
   const { success, error } = useToast();
   const { getSetting } = useCms();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -304,6 +308,11 @@ export const OrderManager: React.FC = () => {
           const isServed = ord.status === 'Served';
           const isCompleted = ord.status === 'Completed';
 
+          // A bar-only order never goes through the kitchen: drinks are poured
+          // and handed over, so "Start Cooking" / "Mark Ready" do not apply.
+          const orderItems = ord.items || [];
+          const isBarOnly = orderItems.length > 0 && orderItems.every((it: any) => it.category_name === 'Drinks & Bar');
+
           return (
             <div
               key={ord.id}
@@ -387,8 +396,8 @@ export const OrderManager: React.FC = () => {
                     </button>
                   )}
 
-                  {/* Pre-cooking Edit Button for Bartenders & Managers */}
-                  {['Pending', 'Confirmed'].includes(ord.status) ? (
+                  {/* Pre-service edit — hidden for bartenders, who are view-only here */}
+                  {!canAct ? null : ['Pending', 'Confirmed'].includes(ord.status) ? (
                     <button
                       onClick={() => setEditingOrder(ord)}
                       className="px-2.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold rounded-xl flex items-center gap-1 transition-colors"
@@ -399,7 +408,7 @@ export const OrderManager: React.FC = () => {
                   ) : (
                     <span
                       className="px-2 py-1 bg-slate-800/40 text-slate-500 border border-slate-800 text-[10px] rounded-lg flex items-center gap-1 cursor-default"
-                      title="Locked: Kitchen preparation already started"
+                      title={isBarOnly ? 'Locked: order already served' : 'Locked: Kitchen preparation already started'}
                     >
                       <Lock className="w-3 h-3" /> Locked
                     </span>
@@ -407,7 +416,28 @@ export const OrderManager: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-1.5">
-                  {isPending && (
+                  {/* Bartender view: status only, no actions. */}
+                  {!canAct && (
+                    <span
+                      className="px-2.5 py-1.5 bg-slate-800/50 text-slate-400 border border-slate-700/50 text-[10px] font-bold rounded-xl flex items-center gap-1.5 cursor-default"
+                      title="Bartenders can follow order status here. Kitchen and payment actions are handled by the kitchen and management."
+                    >
+                      <Lock className="w-3 h-3" /> View only &bull; {ord.status}
+                    </span>
+                  )}
+
+                  {/* Bar-only orders skip the kitchen entirely: straight to served. */}
+                  {canAct && isBarOnly && !isServed && !isCompleted && ord.status !== 'Cancelled' && (
+                    <button
+                      onClick={() => handleUpdateStatus(ord.id, 'Served')}
+                      className="px-3 py-1.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow transition-transform active:scale-95 flex items-center gap-1"
+                      title="Bar order — no kitchen preparation needed"
+                    >
+                      <ConciergeBell className="w-3 h-3" /> Serve Drinks
+                    </button>
+                  )}
+
+                  {canAct && !isBarOnly && isPending && (
                     <button
                       onClick={() => handleUpdateStatus(ord.id, 'Preparing')}
                       className="px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow transition-transform active:scale-95 flex items-center gap-1"
@@ -416,7 +446,7 @@ export const OrderManager: React.FC = () => {
                     </button>
                   )}
 
-                  {isPreparing && (
+                  {canAct && !isBarOnly && isPreparing && (
                     <button
                       onClick={() => handleUpdateStatus(ord.id, 'Ready')}
                       className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow transition-transform active:scale-95 flex items-center gap-1"
@@ -425,7 +455,7 @@ export const OrderManager: React.FC = () => {
                     </button>
                   )}
 
-                  {isReady && (
+                  {canAct && !isBarOnly && isReady && (
                     <button
                       onClick={() => handleUpdateStatus(ord.id, 'Served')}
                       className="px-3 py-1.5 bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow transition-transform active:scale-95 flex items-center gap-1"
@@ -435,7 +465,7 @@ export const OrderManager: React.FC = () => {
                   )}
 
                   {/* Served + unpaid → combined Pay & Complete */}
-                  {isServed && ord.payment_status !== 'Paid' && (
+                  {canAct && isServed && ord.payment_status !== 'Paid' && (
                     confirmPayOrderId === ord.id ? (
                       <div className="flex items-center gap-1.5 ml-auto">
                         <select
@@ -554,7 +584,7 @@ export const OrderManager: React.FC = () => {
               >
                 <Printer className="w-3.5 h-3.5" /> Download Bill
               </button>
-              {selectedReceiptOrder.payment_status !== 'Paid' && (
+              {canAct && selectedReceiptOrder.payment_status !== 'Paid' && (
                 <button
                   onClick={() => handleSettlePayment(selectedReceiptOrder.id)}
                   disabled={submittingPayment}
@@ -698,8 +728,8 @@ export const OrderManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Payment section inline if unpaid */}
-              {selectedReceiptOrder.payment_status !== 'Paid' && (
+              {/* Payment section inline if unpaid — hidden for view-only bartenders */}
+              {canAct && selectedReceiptOrder.payment_status !== 'Paid' && (
                 <div className="no-print border-2 border-dashed border-amber-400 rounded-lg p-4 bg-amber-50 mb-3">
                   <p className="text-xs font-bold text-amber-700 uppercase tracking-wide mb-2">
                     Payment Required
