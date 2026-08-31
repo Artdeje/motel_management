@@ -488,55 +488,55 @@ export const InventoryManager: React.FC = () => {
                 <p className="text-xs text-slate-400 mt-1">Period: {analyticsPeriod.toUpperCase()} &mdash; Generated {new Date().toLocaleString()} &mdash; Grand Horizon Motel</p>
               </div>
 
-              {/* KPI Grid - Professional */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
+              {/* KPI Grid - Professional & User Friendly */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
                 <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg hover:border-slate-700 hover:shadow-xl transition-all">
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-cyan-500/0 via-cyan-500/30 to-cyan-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-slate-400">Every Stock</p>
-                      <p className="text-[10px] text-slate-500 font-medium">All-time In</p>
+                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-slate-400 truncate">Every Stock</p>
+                      <p className="text-[10px] text-slate-500 font-medium truncate">All-time In</p>
                     </div>
                     <span className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/20 flex items-center justify-center shrink-0 group-hover:bg-cyan-500/20 transition-colors"><Package className="w-5 h-5 text-cyan-400"/></span>
                   </div>
-                  <p className="text-2xl lg:text-3xl font-black font-mono text-white mt-3 tracking-tight">{analytics.summary.everyStock?.toLocaleString()}</p>
-                  <p className="text-[11px] text-slate-500 mt-1.5 font-medium">Total ever received • All categories</p>
+                  <p className="text-2xl lg:text-3xl font-black font-mono text-white mt-3 tracking-tight truncate" title={String(analytics.summary.everyStock)}>{Math.round(Number(analytics.summary.everyStock)).toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-500 mt-1.5 font-medium truncate">Total ever received • All categories</p>
                 </div>
                 <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg hover:border-emerald-500/30 hover:shadow-xl transition-all">
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-emerald-500/0 via-emerald-500/30 to-emerald-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-emerald-300/90">Current Stock</p>
-                      <p className="text-[10px] text-slate-500 font-medium">{analytics.summary.currentVsEvery}% of every stock</p>
+                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-emerald-300/90 truncate">Current Stock</p>
+                      <p className="text-[10px] text-slate-500 font-medium truncate">{Number(analytics.summary.currentVsEvery).toFixed(1)}% of every stock</p>
                     </div>
                     <span className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 transition-colors"><Boxes className="w-5 h-5 text-emerald-400"/></span>
                   </div>
-                  <p className="text-2xl lg:text-3xl font-black font-mono text-emerald-400 mt-3 tracking-tight">{analytics.summary.totalCurrentQty?.toLocaleString()}</p>
-                  <p className="text-[11px] text-slate-400 mt-1.5 font-mono font-semibold">{formatCurrency(analytics.summary.totalValuation)} valuation</p>
+                  <p className="text-2xl lg:text-3xl font-black font-mono text-emerald-400 mt-3 tracking-tight truncate" title={String(analytics.summary.totalCurrentQty)}>{Math.round(Number(analytics.summary.totalCurrentQty)).toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-400 mt-1.5 font-mono font-semibold truncate">{formatCurrency(Math.round(Number(analytics.summary.totalValuation)))} valuation</p>
                 </div>
                 <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg hover:border-rose-500/30 hover:shadow-xl transition-all">
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-rose-500/0 via-rose-500/30 to-rose-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-slate-400">Stock Out</p>
-                      <p className="text-[10px] text-slate-500 font-medium capitalize">{analyticsPeriod} • Out vs current {analytics.summary.stockOutVsCurrent}%</p>
+                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-slate-400 truncate">Stock Out</p>
+                      <p className="text-[10px] text-slate-500 font-medium capitalize truncate">{analyticsPeriod} • Out {Number(analytics.summary.stockOutVsCurrent).toFixed(1)}%</p>
                     </div>
                     <span className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/20 flex items-center justify-center shrink-0 group-hover:bg-rose-500/20 transition-colors"><TrendingDown className="w-5 h-5 text-rose-400"/></span>
                   </div>
-                  <p className="text-2xl lg:text-3xl font-black font-mono text-rose-400 mt-3 tracking-tight">{analytics.summary.periodStockOut?.toLocaleString()}</p>
-                  <p className="text-[11px] text-slate-500 mt-1.5">In period: <span className="font-bold text-emerald-400">+{analytics.summary.periodStockIn?.toLocaleString()}</span></p>
+                  <p className="text-2xl lg:text-3xl font-black font-mono text-rose-400 mt-3 tracking-tight truncate" title={String(analytics.summary.periodStockOut)}>{Math.round(Number(analytics.summary.periodStockOut)).toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-500 mt-1.5 truncate">In period: <span className="font-bold text-emerald-400">+{Math.round(Number(analytics.summary.periodStockIn)).toLocaleString()}</span></p>
                 </div>
                 <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-slate-900 to-slate-900 border border-amber-500/20 shadow-lg hover:border-amber-500/30 hover:shadow-xl transition-all">
                   <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-amber-500/0 via-amber-500/40 to-amber-500/0" />
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-amber-300">Alerts</p>
-                      <p className="text-[10px] text-slate-500 font-medium">{analytics.summary.totalItems} active items</p>
+                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-amber-300 truncate">Alerts</p>
+                      <p className="text-[10px] text-slate-500 font-medium truncate">{Math.round(Number(analytics.summary.totalItems)).toLocaleString()} active items</p>
                     </div>
                     <span className="w-10 h-10 rounded-xl bg-amber-500 text-slate-900 flex items-center justify-center shrink-0 shadow-md"><AlertTriangle className="w-5 h-5"/></span>
                   </div>
-                  <p className="text-2xl lg:text-3xl font-black font-mono text-amber-400 mt-3 tracking-tight">{analytics.summary.lowStockCount} <span className="text-[11px] font-bold text-slate-500">Low</span> • {analytics.summary.outOfStockCount} <span className="text-[11px] font-bold text-slate-500">Out</span></p>
-                  <p className="text-[11px] text-amber-300/70 mt-1.5 font-semibold">Requires attention</p>
+                  <p className="text-2xl lg:text-3xl font-black font-mono text-amber-400 mt-3 tracking-tight truncate">{Math.round(Number(analytics.summary.lowStockCount)).toLocaleString()} <span className="text-[11px] font-bold text-slate-500">Low</span> • {Math.round(Number(analytics.summary.outOfStockCount)).toLocaleString()} <span className="text-[11px] font-bold text-slate-500">Out</span></p>
+                  <p className="text-[11px] text-amber-300/70 mt-1.5 font-semibold truncate">Requires attention</p>
                 </div>
               </div>
 
@@ -612,24 +612,57 @@ export const InventoryManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Label filtered table preview for PDF */}
-              <div>
-                <h2 className="text-sm font-bold pb-1 mb-2" style={{borderBottom:'2px solid #0f172a'}}>Live Stock Table (Current) &mdash; Label Overview</h2>
-                <table className="w-full">
-                  <thead><tr><th>Label</th><th>Items</th><th>Current Qty</th><th>Valuation</th><th>Share of Stock</th></tr></thead>
-                  <tbody>
-                    {analytics.labelBreakdown && Object.entries(analytics.labelBreakdown).map(([label, v]:any)=>(
-                      <tr key={label}>
-                        <td><span className={`badge ${label.toLowerCase().includes('drink') ? 'bg-drink' : label.toLowerCase().includes('kitchen') ? 'bg-kitchen' : label.toLowerCase().includes('food') ? 'bg-food' : 'bg-tools'}`}>{label}</span></td>
-                        <td className="font-mono font-bold">{v.count}</td>
-                        <td className="font-mono">{v.currentQty.toLocaleString()}</td>
-                        <td className="font-mono">{formatCurrency(v.valuation)}</td>
-                        <td>{analytics.summary.totalCurrentQty>0 ? ((v.currentQty/analytics.summary.totalCurrentQty)*100).toFixed(1):'0'}%</td>
+              {/* Live Stock Table - Professional & Horizontal Scrollable */}
+              <div className="relative overflow-hidden rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
+                <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-slate-700/0 via-slate-600/20 to-slate-700/0" />
+                <div className="p-5 lg:p-6 border-b border-slate-800/60">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center shrink-0">
+                      <ClipboardList className="w-5 h-5 text-slate-400" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-sm lg:text-[15px] font-bold text-white tracking-tight">Live Stock by Label</h2>
+                      <p className="text-[11px] text-slate-500 font-medium">Current distribution • Horizontal scroll for long texts</p>
+                    </div>
+                    <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase text-slate-400 bg-slate-800/60 border border-slate-700/50 px-2.5 py-1 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live
+                    </span>
+                  </div>
+                </div>
+                <div className="overflow-x-auto scrollbar-thin scrollbar-track-slate-900 scrollbar-thumb-slate-700">
+                  <table className="w-full min-w-[520px] text-left">
+                    <thead className="bg-slate-950/60 border-b border-slate-800">
+                      <tr className="text-[11px] font-bold tracking-widest uppercase text-slate-400">
+                        <th className="px-4 lg:px-6 py-3 whitespace-nowrap">Label</th>
+                        <th className="px-3 py-3 text-right whitespace-nowrap">Items</th>
+                        <th className="px-3 py-3 text-right whitespace-nowrap">Current Qty</th>
+                        <th className="px-3 py-3 text-right whitespace-nowrap">Valuation</th>
+                        <th className="px-4 lg:px-6 py-3 text-right whitespace-nowrap">Share</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="footer">Every Stock: {analytics.summary.everyStock?.toLocaleString()} &bull; Current: {analytics.summary.totalCurrentQty?.toLocaleString()} ({analytics.summary.currentVsEvery}%) &bull; Stock Out: {analytics.summary.totalStockOut?.toLocaleString()} &bull; Period ({analyticsPeriod}): In {analytics.summary.periodStockIn} / Out {analytics.summary.periodStockOut}</div>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60">
+                      {analytics.labelBreakdown && Object.entries(analytics.labelBreakdown).map(([label, v]:any)=>(
+                        <tr key={label} className="hover:bg-slate-800/30 transition-colors">
+                          <td className="px-4 lg:px-6 py-3.5 whitespace-nowrap"><span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-extrabold tracking-wide border shadow-sm ${label.toLowerCase().includes('drink') ? 'bg-drink' : label.toLowerCase().includes('kitchen') ? 'bg-kitchen' : label.toLowerCase().includes('food') ? 'bg-food' : 'bg-tools'}`}>{label}</span></td>
+                          <td className="px-3 py-3.5 text-right font-mono font-bold text-white whitespace-nowrap">{Math.round(Number(v.count)).toLocaleString()}</td>
+                          <td className="px-3 py-3.5 text-right font-mono font-bold text-white whitespace-nowrap">{Math.round(Number(v.currentQty)).toLocaleString()}</td>
+                          <td className="px-3 py-3.5 text-right font-mono font-bold text-emerald-400 whitespace-nowrap">{formatCurrency(Math.round(Number(v.valuation)))}</td>
+                          <td className="px-4 lg:px-6 py-3.5 text-right whitespace-nowrap"><span className="inline-flex items-center gap-1.5 text-xs font-bold text-white bg-slate-800/60 border border-slate-700/50 px-2.5 py-1 rounded-full">{analytics.summary.totalCurrentQty>0 ? (Math.round((Number(v.currentQty)/Number(analytics.summary.totalCurrentQty))*1000)/10).toFixed(1):'0'}% <span className="w-8 h-1.5 rounded-full bg-slate-700 overflow-hidden inline-block"><span className="block h-full bg-amber-500 rounded-full" style={{width: `${analytics.summary.totalCurrentQty>0 ? Math.round((Number(v.currentQty)/Number(analytics.summary.totalCurrentQty))*100) : 0}%`}} /></span></span></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="px-4 lg:px-6 py-3 bg-slate-950/40 border-t border-slate-800/60 flex flex-wrap items-center justify-between gap-2 text-[11px] font-medium text-slate-500">
+                  <span className="whitespace-nowrap">Every Stock: <strong className="text-white font-mono">{Math.round(Number(analytics.summary.everyStock)).toLocaleString()}</strong></span>
+                  <span className="whitespace-nowrap">Current: <strong className="text-emerald-400 font-mono">{Math.round(Number(analytics.summary.totalCurrentQty)).toLocaleString()}</strong> ({Number(analytics.summary.currentVsEvery).toFixed(1)}%)</span>
+                  <span className="whitespace-nowrap">Stock Out: <strong className="text-rose-400 font-mono">{Math.round(Number(analytics.summary.totalStockOut)).toLocaleString()}</strong></span>
+                  <span className="whitespace-nowrap">Period <span className="uppercase font-bold text-slate-400">{analyticsPeriod}</span>: <span className="text-emerald-400 font-mono">+{Math.round(Number(analytics.summary.periodStockIn)).toLocaleString()}</span> / <span className="text-rose-400 font-mono">{Math.round(Number(analytics.summary.periodStockOut)).toLocaleString()}</span></span>
+                </div>
+                <div className="px-4 lg:px-6 py-2 bg-amber-500/5 border-t border-amber-500/10 flex items-center gap-2 text-[10px] text-amber-300/80">
+                  <span className="hidden sm:inline">💡</span>
+                  <span className="font-medium tracking-wide">Tip: Horizontal scroll for long texts • Numbers rounded, no trailing dots</span>
+                </div>
               </div>
             </div>
           )}
