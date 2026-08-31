@@ -20,7 +20,8 @@ import {
   RefreshCw,
   XCircle,
   Edit3,
-  Lock
+  Lock,
+  Trash2
 } from 'lucide-react';
 import { formatCurrency } from '../../utils/currency';
 import { formatTimeCAT, formatDateTimeCAT } from '../../utils/dates';
@@ -38,6 +39,7 @@ export const OrderManager: React.FC = () => {
   const [confirmPayOrderId, setConfirmPayOrderId] = useState<string | null>(null);
   const [confirmPayMethod, setConfirmPayMethod] = useState('Cash');
   const [submittingQuickPay, setSubmittingQuickPay] = useState(false);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
 
   // Settlement
   const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -114,6 +116,36 @@ export const OrderManager: React.FC = () => {
       error('Payment failed', err.message);
     } finally {
       setSubmittingQuickPay(false);
+    }
+  };
+
+  const handleDeleteOrder = async (orderId: string) => {
+    if (!window.confirm('Delete this order permanently? This will also release reserved stock and cannot be undone.')) return;
+    setDeletingOrderId(orderId);
+    try {
+      await api.deleteOrder(orderId);
+      success('Order deleted');
+      fetchOrders();
+    } catch (err:any) {
+      error('Delete failed', err.message);
+    } finally {
+      setDeletingOrderId(null);
+    }
+  };
+
+  const handleClearAllOrders = async () => {
+    if (!window.confirm(`Empty ALL order history? This will permanently delete ${orders.length} orders, their items and payments, and release reserved stock. This cannot be undone.`)) return;
+    const confirmText = window.prompt(`Type DELETE to confirm emptying all ${orders.length} orders:`);
+    if (confirmText !== 'DELETE') {
+      if (confirmText !== null) error('Cancelled', 'Type DELETE exactly to confirm');
+      return;
+    }
+    try {
+      const res:any = await api.clearAllOrders();
+      success(res.message || 'Order history cleared');
+      fetchOrders();
+    } catch (err:any) {
+      error('Clear failed', err.message);
     }
   };
 
@@ -214,12 +246,23 @@ export const OrderManager: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={fetchOrders}
-          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 transition-colors self-start sm:self-auto"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh Orders
-        </button>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={fetchOrders}
+            className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 transition-colors"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+          {user?.role === 'admin' && (
+            <button
+              onClick={handleClearAllOrders}
+              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-colors"
+              title="Empty all order history (admin only)"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Empty All ({orders.length})
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -333,6 +376,16 @@ export const OrderManager: React.FC = () => {
                   >
                     <Receipt className="w-3.5 h-3.5" /> Bill
                   </button>
+                  {user?.role === 'admin' && (
+                    <button
+                      onClick={() => handleDeleteOrder(ord.id)}
+                      disabled={deletingOrderId === ord.id}
+                      className="p-1.5 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-xl flex items-center justify-center transition-colors disabled:opacity-50"
+                      title="Delete order history (admin only)"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
 
                   {/* Pre-cooking Edit Button for Bartenders & Managers */}
                   {['Pending', 'Confirmed'].includes(ord.status) ? (

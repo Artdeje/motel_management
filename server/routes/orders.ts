@@ -552,6 +552,54 @@ ordersRouter.put('/orders/:id/status', authMiddleware, requireRoles(['admin', 'm
   return res.json({ message: `Order status updated to ${status}` });
 });
 
+// DELETE /api/orders - Admin: empty all order history (bulk clear) - optimized
+ordersRouter.delete('/orders', authMiddleware, requireRoles(['admin']), async (req: Request, res: Response) => {
+  try {
+    const countRow = await dbGet<any>('SELECT COUNT(*) as cnt FROM orders');
+    const total = countRow?.cnt || 0;
+    await dbTransaction(async () => {
+      // Fast release: reset all reserved stock (all pending reservations are cleared with orders)
+      await dbRun('UPDATE inventory_items SET reserved_quantity = 0 WHERE reserved_quantity > 0');
+      await dbRun('DELETE FROM order_items');
+      await dbRun('DELETE FROM payments WHERE order_id IS NOT NULL');
+      await dbRun('DELETE FROM orders');
+    });
+    await logAudit(req.user, 'Orders', 'Bulk Delete', null, `Admin ${req.user?.username} emptied all order history (${total} orders)`, req.ip);
+    return res.json({ message: `Order history cleared (${total} orders deleted)` });
+  } catch (err:any) {
+    console.error('Bulk delete orders error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to clear order history' });
+  }
+});
+
+// DELETE /api/orders/:id - Admin: delete single order history
+ordersRouter.delete('/orders/:id', authMiddleware, requireRoles(['admin']), async (req: Request, res: Response) => {
+  const order = await dbGet<any>('SELECT * FROM orders WHERE id = ?', [req.params.id]);
+  if (!order) return res.status(404).json({ error: 'Order not found' });
+  try {
+    await dbTransaction(async () => {
+      if (order.stock_reserved === 1 && order.stock_consumed === 0) {
+        const items = await dbAll<any>('SELECT * FROM order_items WHERE order_id = ?', [order.id]);
+        for (const item of items) {
+          const ingredients = await dbAll<any>('SELECT * FROM menu_item_ingredients WHERE menu_item_id = ?', [item.menu_item_id]);
+          for (const ing of ingredients) {
+            const reservedQty = ing.quantity_required * item.quantity;
+            await dbRun('UPDATE inventory_items SET reserved_quantity = GREATEST(0, reserved_quantity - ?) WHERE id = ?', [reservedQty, ing.inventory_item_id]);
+          }
+        }
+      }
+      await dbRun('DELETE FROM order_items WHERE order_id = ?', [order.id]);
+      await dbRun('DELETE FROM payments WHERE order_id = ?', [order.id]);
+      await dbRun('DELETE FROM orders WHERE id = ?', [order.id]);
+    });
+    await logAudit(req.user, 'Orders', 'Deleted', order.id, `Admin ${req.user?.username} deleted order #${order.order_number}`, req.ip);
+    return res.json({ message: `Order #${order.order_number} deleted` });
+  } catch (err:any) {
+    console.error('Delete order error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to delete order' });
+  }
+});
+
 // POST /api/orders/:id/pay - Record payment for order directly
 ordersRouter.post('/orders/:id/pay', authMiddleware, requireRoles(['admin', 'manager']), async (req: Request, res: Response) => {
   const { payment_method } = req.body;

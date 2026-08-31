@@ -142,6 +142,8 @@ export const api = {
   editOrder: (id: string, order: any) => request(`/api/orders/${id}`, { method: 'PUT', body: JSON.stringify(order) }),
   updateOrderStatus: (id: string, status: string) => request(`/api/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
   payOrder: (id: string, payload: any) => request(`/api/orders/${id}/pay`, { method: 'POST', body: JSON.stringify(payload) }),
+  deleteOrder: (id: string) => request(`/api/orders/${id}`, { method: 'DELETE' }),
+  clearAllOrders: () => request('/api/orders', { method: 'DELETE' }),
 
   // Kitchen operations
   getKitchenDashboard: () => request('/api/kitchen/dashboard'),
