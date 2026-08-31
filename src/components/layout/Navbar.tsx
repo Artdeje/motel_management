@@ -4,6 +4,7 @@ import { useCms } from '../../context/CmsContext';
 import { UserRole } from '../../types';
 import { api } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { useTheme } from '../../context/ThemeContext';
 import {
   Bell,
   CheckCircle2,
@@ -18,6 +19,8 @@ import {
   ConciergeBell,
   CheckCheck,
   Building2,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { formatNowCAT, formatTimeCAT } from '../../utils/dates';
 
@@ -35,6 +38,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
   const { user, switchRole, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const { getSetting } = useCms();
   const { info } = useToast();
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -171,6 +175,15 @@ export const Navbar: React.FC<NavbarProps> = ({ onToggleSidebar }) => {
             </div>
           )}
         </div>
+
+        <button
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          aria-label={theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}
+          className="p-2 rounded-xl text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+        >
+          {theme === 'dark' ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+        </button>
 
         <div className="relative" ref={notifRef}>
           <button

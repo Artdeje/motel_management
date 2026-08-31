@@ -1,14 +1,115 @@
 import { Router, Request, Response } from 'express';
 import { dbAll, dbGet, dbRun, dbTransaction } from '../db/database';
 import { authMiddleware, logAudit, requireRoles, createNotification } from '../middleware/auth';
+import { getStockLabel } from './inventory';
 
 export const menuRouter = Router();
+
+// Selling price for an auto-published drink = purchase cost x markup, rounded up
+// to the nearest 100 (RWF prices are whole numbers). Managers can edit any price
+// afterwards through normal menu CRUD — this only sets the opening price.
+const DRINK_MARKUP = Number(process.env.DRINK_MENU_MARKUP) || 2;
+function drinkSellingPrice(unitCost: number): number {
+  const base = (Number(unitCost) || 0) * DRINK_MARKUP;
+  return Math.max(100, Math.ceil(base / 100) * 100);
+}
+
+/**
+ * Publish every Drink-labelled inventory item to the 'Drinks & Bar' menu.
+ *
+ * Idempotent: matches on lower-cased name, so an item already on the menu is
+ * left completely alone (price edits and manual changes survive). Each created
+ * menu item is linked to its inventory item as a 1-unit ingredient, so bar
+ * stock drives menu availability automatically.
+ *
+ * Returns counts rather than throwing — the menu must still load if this fails.
+ */
+export async function syncDrinksToMenu(): Promise<{ created: number; skipped: number; error?: string }> {
+  try {
+    let barCat = await dbGet<any>("SELECT id FROM menu_categories WHERE name = 'Drinks & Bar'");
+    if (!barCat?.id) {
+      await dbRun('INSERT INTO menu_categories (id, name, display_order, icon) VALUES (?, ?, ?, ?)', ['mcat-drinks', 'Drinks & Bar', 4, 'Wine']);
+      barCat = { id: 'mcat-drinks' };
+    }
+
+    const stock = await dbAll<any>(
+      `SELECT i.id, i.name, i.unit, i.unit_cost, i.department, ic.name as category_name
+       FROM inventory_items i
+       JOIN inventory_categories ic ON i.category_id = ic.id
+       WHERE i.is_active = 1`
+    );
+    const drinks = stock.filter((s) => getStockLabel(s.category_name, s.department) === 'Drink');
+    if (drinks.length === 0) return { created: 0, skipped: 0 };
+
+    // Compare against ALL menu items (including is_active=0) so a drink the
+    // manager deliberately deleted is not silently resurrected on next load.
+    // Both lookups are loaded up front: this runs on every menu load, so the
+    // loop below must not issue a query per drink.
+    const existing = await dbAll<any>('SELECT id, name FROM menu_items');
+    const taken = new Set(existing.map((m) => String(m.name || '').trim().toLowerCase()));
+    const existingIds = new Set(existing.map((m) => String(m.id)));
+    const linkedIds = new Set(
+      (await dbAll<any>('SELECT DISTINCT menu_item_id FROM menu_item_ingredients')).map((r) => String(r.menu_item_id))
+    );
+
+    let created = 0, skipped = 0;
+    for (const d of drinks) {
+      const id = `menu-drink-${d.id}`;
+
+      // Check our own id BEFORE the name check: an already-published drink must
+      // still get its stock link repaired, and the name check would skip past it.
+      if (existingIds.has(id)) {
+        // Without the link the item falls back to a flat 50 servings and stops
+        // tracking real bar stock.
+        if (!linkedIds.has(id)) {
+          await dbRun(
+            'INSERT INTO menu_item_ingredients (id, menu_item_id, inventory_item_id, quantity_required, unit) VALUES (?, ?, ?, ?, ?)',
+            [`rec-drink-${d.id}`, id, d.id, 1, d.unit || 'units']
+          );
+          linkedIds.add(id);
+        }
+        skipped++;
+        continue;
+      }
+
+      // A manually-created menu item already owns this name — leave it alone.
+      const key = String(d.name || '').trim().toLowerCase();
+      if (!key || taken.has(key)) { skipped++; continue; }
+
+      // Both rows or neither: a menu item without its ingredient link would
+      // report a default 50 servings and ignore real bar stock.
+      await dbTransaction(async () => {
+        await dbRun(
+          `INSERT INTO menu_items (id, name, category_id, description, price, preparation_duration, is_active, is_available)
+           VALUES (?, ?, ?, ?, ?, ?, 1, 1)`,
+          [id, d.name, barCat.id, `Bar stock item — served by the ${d.unit || 'unit'}`, drinkSellingPrice(d.unit_cost), 2]
+        );
+        // Link 1 stock unit per serving so availability tracks live bar stock.
+        await dbRun(
+          'INSERT INTO menu_item_ingredients (id, menu_item_id, inventory_item_id, quantity_required, unit) VALUES (?, ?, ?, ?, ?)',
+          [`rec-drink-${d.id}`, id, d.id, 1, d.unit || 'units']
+        );
+      });
+      taken.add(key);
+      created++;
+    }
+    if (created > 0) console.log(`[Menu] Published ${created} drink(s) from inventory to Drinks & Bar`);
+    return { created, skipped };
+  } catch (e: any) {
+    console.error('[Menu] Drink sync failed:', e?.message || e);
+    return { created: 0, skipped: 0, error: e?.message || String(e) };
+  }
+}
 
 // GET /api/menu/items - List menu items with live ingredient stock & computed available servings
 // Menu is INDEPENDENT from inventory: items can exist without any linked stock.
 // When ingredients are linked, live stock is pulled from inventory (LEFT JOIN so orphaned stock doesn't break menu).
 // Only active items are returned so deleted items (is_active=0) disappear from UI – full CRUD verified.
 menuRouter.get('/menu/items', authMiddleware, async (req: Request, res: Response) => {
+  // Publish any Drink stock that is not on the menu yet. Idempotent and
+  // non-throwing: once everything is synced this is just two SELECTs.
+  await syncDrinksToMenu();
+
   const items = await dbAll<any>(
     `SELECT m.*, mc.name as category_name, mc.icon as category_icon,
             u.full_name as deactivated_by_name
@@ -222,6 +323,16 @@ menuRouter.delete('/menu/items/:id', authMiddleware, requireRoles(['admin', 'man
 });
 
 // GET /api/menu/categories
+// POST /api/menu/sync-drinks - Manually publish all Drink stock to Drinks & Bar.
+// Runs automatically on every menu load; this endpoint is for an explicit
+// "sync now" action and reports what it did.
+menuRouter.post('/menu/sync-drinks', authMiddleware, requireRoles(['admin', 'manager']), async (req: Request, res: Response) => {
+  const result = await syncDrinksToMenu();
+  if (result.error) return res.status(500).json({ error: result.error });
+  await logAudit(req.user!, 'Menu', 'Sync drinks from inventory', null, `Published ${result.created} drink(s), ${result.skipped} already on menu`, req.ip);
+  return res.json({ message: `Published ${result.created} drink(s) to Drinks & Bar`, ...result });
+});
+
 menuRouter.get('/menu/categories', authMiddleware, async (req: Request, res: Response) => {
   const categories = await dbAll<any>('SELECT * FROM menu_categories ORDER BY display_order ASC');
   return res.json({ categories });

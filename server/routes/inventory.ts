@@ -7,7 +7,7 @@ export const inventoryRouter = Router();
 // Helper: canonical stock categories - Drink, Kitchen ingredient, Tools
 // 'Food' was retired as a stock category: edible stock is all Kitchen ingredient.
 // Legacy Food/Foods rows still exist for FK safety and are folded in here.
-function getStockLabel(categoryName: string, department?: string): string {
+export function getStockLabel(categoryName: string, department?: string): string {
   const n = (categoryName || '').toLowerCase();
   const d = (department || '').toLowerCase();
   if (n.includes('drink') || n.includes('bar') || n.includes('beverage') || n.includes('wine') || n.includes('beer') || n.includes('juice') || n.includes('water') || n.includes('soda') || d === 'bar') return 'Drink';

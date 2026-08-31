@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 import { InventoryItem, StockRequest } from '../../types';
 import {
   Boxes,
@@ -49,6 +50,12 @@ const LABEL_BG: Record<string, string> = {
 };
 
 export const InventoryManager: React.FC = () => {
+  const { theme } = useTheme();
+  // Recharts takes concrete colours, not CSS classes, so the chart palette has
+  // to be resolved in JS rather than inherited from the theme stylesheet.
+  const chart = theme === 'light'
+    ? { grid: '#e2e8f0', tick: '#475569', axis: '#cbd5e1', tipBg: '#ffffff', tipBorder: '#e2e8f0', dot: '#ffffff', shadow: '0 10px 25px rgba(15,23,42,0.12)' }
+    : { grid: '#1e293b', tick: '#94a3b8', axis: '#334155', tipBg: '#0f172a', tipBorder: '#334155', dot: '#0f172a', shadow: '0 10px 25px rgba(0,0,0,0.3)' };
   const { user } = useAuth();
   const { success, error } = useToast();
   const [activeTab, setActiveTab] = useState<'analytics' | 'items' | 'lowStock' | 'requests' | 'transactions'>('analytics');
@@ -444,14 +451,11 @@ export const InventoryManager: React.FC = () => {
       {activeTab==='analytics' && (
         <div className="space-y-6 lg:space-y-8">
           {/* Period Filter + Export - Professional Card */}
-          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 border border-slate-700/50 shadow-lg">
-            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
+          <div className="analytics-filter" style={{ '--card-accent': '#fbbf24' } as React.CSSProperties}>
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 lg:p-5">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 <div className="flex items-center gap-2.5 shrink-0">
-                  <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/20 flex items-center justify-center">
-                    <Filter className="w-4 h-4 text-amber-400" />
-                  </div>
+                  <div className="analytics-chip" style={{ width: '2rem', height: '2rem' }}><Filter className="w-4 h-4" /></div>
                   <div>
                     <p className="text-xs font-extrabold tracking-widest uppercase text-slate-300">Analytics Period</p>
                     <p className="text-[11px] text-slate-500 font-medium">Filter stock trends & valuation</p>
@@ -488,44 +492,40 @@ export const InventoryManager: React.FC = () => {
 
               {/* KPI Grid - Professional & User Friendly */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
-                <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg hover:border-slate-700 hover:shadow-xl transition-all">
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-cyan-500/0 via-cyan-500/30 to-cyan-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="analytics-card group" style={{ '--card-accent': '#22d3ee' } as React.CSSProperties}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-slate-400 truncate">Every Stock</p>
                       <p className="text-[10px] text-slate-500 font-medium truncate">All-time In</p>
                     </div>
-                    <span className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/20 flex items-center justify-center shrink-0 group-hover:bg-cyan-500/20 transition-colors"><Package className="w-5 h-5 text-cyan-400"/></span>
+                    <span className="analytics-chip"><Package className="w-5 h-5"/></span>
                   </div>
                   <p className="text-2xl lg:text-3xl font-black font-mono text-white mt-3 tracking-tight truncate" title={String(analytics.summary.everyStock)}>{Math.round(Number(analytics.summary.everyStock)).toLocaleString()}</p>
                   <p className="text-[11px] text-slate-500 mt-1.5 font-medium truncate">Total ever received • All categories</p>
                 </div>
-                <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg hover:border-emerald-500/30 hover:shadow-xl transition-all">
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-emerald-500/0 via-emerald-500/30 to-emerald-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="analytics-card group" style={{ '--card-accent': '#34d399' } as React.CSSProperties}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-emerald-300/90 truncate">Current Stock</p>
                       <p className="text-[10px] text-slate-500 font-medium truncate">{Number(analytics.summary.currentVsEvery).toFixed(1)}% of every stock</p>
                     </div>
-                    <span className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 transition-colors"><Boxes className="w-5 h-5 text-emerald-400"/></span>
+                    <span className="analytics-chip"><Boxes className="w-5 h-5"/></span>
                   </div>
                   <p className="text-2xl lg:text-3xl font-black font-mono text-emerald-400 mt-3 tracking-tight truncate" title={String(analytics.summary.totalCurrentQty)}>{Math.round(Number(analytics.summary.totalCurrentQty)).toLocaleString()}</p>
                   <p className="text-[11px] text-slate-400 mt-1.5 font-mono font-semibold truncate">{formatCurrency(Math.round(Number(analytics.summary.totalValuation)))} valuation</p>
                 </div>
-                <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg hover:border-rose-500/30 hover:shadow-xl transition-all">
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-rose-500/0 via-rose-500/30 to-rose-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <div className="analytics-card group" style={{ '--card-accent': '#fb7185' } as React.CSSProperties}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-slate-400 truncate">Stock Out</p>
                       <p className="text-[10px] text-slate-500 font-medium capitalize truncate">{analyticsPeriod} • Out {Number(analytics.summary.stockOutVsCurrent).toFixed(1)}%</p>
                     </div>
-                    <span className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/20 flex items-center justify-center shrink-0 group-hover:bg-rose-500/20 transition-colors"><TrendingDown className="w-5 h-5 text-rose-400"/></span>
+                    <span className="analytics-chip"><TrendingDown className="w-5 h-5"/></span>
                   </div>
                   <p className="text-2xl lg:text-3xl font-black font-mono text-rose-400 mt-3 tracking-tight truncate" title={String(analytics.summary.periodStockOut)}>{Math.round(Number(analytics.summary.periodStockOut)).toLocaleString()}</p>
                   <p className="text-[11px] text-slate-500 mt-1.5 truncate">In period: <span className="font-bold text-emerald-400">+{Math.round(Number(analytics.summary.periodStockIn)).toLocaleString()}</span></p>
                 </div>
-                <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-slate-900 to-slate-900 border border-amber-500/20 shadow-lg hover:border-amber-500/30 hover:shadow-xl transition-all">
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-amber-500/0 via-amber-500/40 to-amber-500/0" />
+                <div className="analytics-card group" style={{ '--card-accent': '#fbbf24' } as React.CSSProperties}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-amber-300 truncate">Alerts</p>
@@ -540,13 +540,10 @@ export const InventoryManager: React.FC = () => {
 
               {/* Charts - Professional */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 relative overflow-hidden p-6 lg:p-7 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-cyan-500/0 via-cyan-500/20 to-transparent" />
+                <div className="analytics-panel lg:col-span-2 group" style={{ '--card-accent': '#22d3ee' } as React.CSSProperties}>
                   <div className="flex items-start justify-between gap-4 mb-5">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/20 flex items-center justify-center shrink-0">
-                        <Activity className="w-5 h-5 text-cyan-400"/>
-                      </div>
+                      <div className="analytics-chip"><Activity className="w-5 h-5"/></div>
                       <div>
                         <h3 className="text-sm lg:text-[15px] font-bold text-white tracking-tight">Stock In vs Stock Out Trend</h3>
                         <p className="text-[11px] text-slate-500 font-medium capitalize">{analyticsPeriod} • Daily net movement • Live</p>
@@ -561,27 +558,24 @@ export const InventoryManager: React.FC = () => {
                           <linearGradient id="gIn" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#34d399" stopOpacity={0.35}/><stop offset="95%" stopColor="#34d399" stopOpacity={0}/></linearGradient>
                           <linearGradient id="gOut" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f87171" stopOpacity={0.35}/><stop offset="95%" stopColor="#f87171" stopOpacity={0}/></linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false}/>
-                        <XAxis dataKey="day" tick={{fontSize:11, fill:'#94a3b8', fontWeight:600}} axisLine={{stroke:'#334155'}} tickLine={false}/>
-                        <YAxis tick={{fontSize:11, fill:'#94a3b8', fontWeight:600}} axisLine={false} tickLine={false}/>
-                        <Tooltip contentStyle={{background:'#0f172a', border:'1px solid #334155', borderRadius:12, boxShadow:'0 10px 25px rgba(0,0,0,0.3)'}} labelStyle={{color:'#94a3b8', fontSize:11, fontWeight:700}} itemStyle={{fontSize:12, fontWeight:700}}/>
+                        <CartesianGrid strokeDasharray="3 3" stroke={chart.grid} vertical={false}/>
+                        <XAxis dataKey="day" tick={{fontSize:11, fill:chart.tick, fontWeight:600}} axisLine={{stroke:chart.axis}} tickLine={false}/>
+                        <YAxis tick={{fontSize:11, fill:chart.tick, fontWeight:600}} axisLine={false} tickLine={false}/>
+                        <Tooltip contentStyle={{background:chart.tipBg, border:`1px solid ${chart.tipBorder}`, borderRadius:12, boxShadow:chart.shadow}} labelStyle={{color:chart.tick, fontSize:11, fontWeight:700}} itemStyle={{fontSize:12, fontWeight:700}}/>
                         <Legend wrapperStyle={{fontSize:12, fontWeight:700, paddingTop:12}} iconType="circle"/>
-                        <Area type="monotone" dataKey="stockIn" name="Stock In" stroke="#34d399" fill="url(#gIn)" strokeWidth={2.5} dot={false} activeDot={{r:5, strokeWidth:2, stroke:'#0f172a'}}/>
-                        <Area type="monotone" dataKey="stockOut" name="Stock Out" stroke="#f87171" fill="url(#gOut)" strokeWidth={2.5} dot={false} activeDot={{r:5, strokeWidth:2, stroke:'#0f172a'}}/>
+                        <Area type="monotone" dataKey="stockIn" name="Stock In" stroke="#34d399" fill="url(#gIn)" strokeWidth={2.5} dot={false} activeDot={{r:5, strokeWidth:2, stroke:chart.dot}}/>
+                        <Area type="monotone" dataKey="stockOut" name="Stock Out" stroke="#f87171" fill="url(#gOut)" strokeWidth={2.5} dot={false} activeDot={{r:5, strokeWidth:2, stroke:chart.dot}}/>
                       </AreaChart>
                     </ResponsiveContainer>
-                  ) : <div className="h-[290px] flex flex-col items-center justify-center text-slate-500 bg-slate-800/20 rounded-xl border border-dashed border-slate-700/50"><Activity className="w-8 h-8 text-slate-600 mb-2"/><p className="text-xs font-semibold">No transactions in period</p><p className="text-[11px] text-slate-500">Try a different period</p></div>}
+                  ) : <div className="analytics-empty h-[290px]"><Activity className="w-8 h-8 text-slate-600 mb-2"/><p className="text-xs font-semibold">No transactions in period</p><p className="text-[11px] text-slate-500">Try a different period</p></div>}
                   <div className="mt-5 p-3 lg:p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs lg:text-sm">
                     <span className="text-slate-400 font-medium">Current stock <strong className="text-emerald-400 font-black">{analytics.summary.currentVsEvery}%</strong> of every stock</span>
                     <span className="text-slate-400 font-medium">Period net <strong className={analytics.summary.periodStockIn - analytics.summary.periodStockOut >=0 ? 'text-emerald-400 font-black':'text-rose-400 font-black'}>{analytics.summary.periodStockIn - analytics.summary.periodStockOut >0 ? '+' : ''}{analytics.summary.periodStockIn - analytics.summary.periodStockOut}</strong> units</span>
                   </div>
                 </div>
-                <div className="relative overflow-hidden p-6 lg:p-7 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
-                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-purple-500/0 via-purple-500/20 to-transparent" />
+                <div className="analytics-panel group" style={{ '--card-accent': '#c084fc' } as React.CSSProperties}>
                   <div className="flex items-center gap-3 mb-5">
-                    <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/20 flex items-center justify-center shrink-0">
-                      <Layers className="w-5 h-5 text-purple-400"/>
-                    </div>
+                    <div className="analytics-chip"><Layers className="w-5 h-5"/></div>
                     <div>
                       <h3 className="text-sm lg:text-[15px] font-bold text-white tracking-tight">Stock by Label</h3>
                       <p className="text-[11px] text-slate-500 font-medium">Distribution • Current qty</p>
@@ -594,19 +588,19 @@ export const InventoryManager: React.FC = () => {
                           <Pie data={Object.entries(analytics.labelBreakdown).map(([k,v]:any)=>({name:k, value:v.currentQty}))} cx="50%" cy="50%" innerRadius={52} outerRadius={78} paddingAngle={3} dataKey="value" nameKey="name" stroke="none">
                             {Object.keys(analytics.labelBreakdown).map((k,i)=> <Cell key={k} fill={LABEL_COLORS[k]||'#94a3b8'}/>)}
                           </Pie>
-                          <Tooltip contentStyle={{background:'#0f172a', border:'1px solid #334155', borderRadius:10}} formatter={(v:number)=> v.toLocaleString()}/>
+                          <Tooltip contentStyle={{background:chart.tipBg, border:`1px solid ${chart.tipBorder}`, borderRadius:10}} formatter={(v:number)=> v.toLocaleString()}/>
                         </PieChart>
                       </ResponsiveContainer>
                       <div className="space-y-2.5 mt-4">
                         {Object.entries(analytics.labelBreakdown).map(([label, v]:any)=>(
-                          <div key={label} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/40 border border-slate-800/60 hover:bg-slate-800/60 transition-colors">
+                          <div key={label} className="analytics-row">
                             <div className="flex items-center gap-2.5"><div className="w-3 h-3 rounded-full shadow-sm" style={{background: LABEL_COLORS[label], boxShadow:`0 0 8px ${LABEL_COLORS[label]}60`}}/><span className="text-[13px] font-bold text-white tracking-tight">{label}</span><span className="text-[11px] font-semibold text-slate-500 bg-slate-700/40 px-1.5 py-0.5 rounded-full">{v.count}</span></div>
                             <span className="text-[12px] font-black font-mono text-white">{v.currentQty.toLocaleString()} <span className="text-[10px] font-bold text-slate-400">• {formatCurrency(v.valuation)}</span></span>
                           </div>
                         ))}
                       </div>
                     </>
-                  ) : <div className="h-[290px] flex flex-col items-center justify-center text-slate-500 bg-slate-800/20 rounded-xl border border-dashed border-slate-700/50"><Layers className="w-8 h-8 text-slate-600 mb-2"/><p className="text-xs font-semibold">No data</p></div>}
+                  ) : <div className="analytics-empty h-[290px]"><Layers className="w-8 h-8 text-slate-600 mb-2"/><p className="text-xs font-semibold">No data</p></div>}
                 </div>
               </div>
 

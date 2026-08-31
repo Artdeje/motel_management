@@ -74,3 +74,205 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(245, 158, 11, 0.4) rgba(30, 41, 59, 0.5);
 }
+
+/* ============================================================
+   LIGHT THEME
+   ------------------------------------------------------------
+   Tailwind v4 compiles every colour utility to var(--color-*),
+   e.g. .bg-slate-900{background-color:var(--color-slate-900)}.
+   So redefining the slate ramp under [data-theme="light"] flips
+   the entire UI at once, instead of adding dark: variants to
+   ~1400 hard-coded classes.
+
+   The ramp is INVERTED: this app treats slate-950/900 as the
+   darkest surfaces and slate-300/400 as muted text, so in light
+   mode the low numbers must become dark and the high ones light.
+
+   These rules sit outside @layer on purpose — unlayered CSS wins
+   over Tailwind's layered utilities, which is what lets the few
+   explicit overrides below stick.
+   ============================================================ */
+
+[data-theme='light'] {
+  /* Surfaces (were darkest) -> now lightest */
+  --color-slate-950: #eef2f7; /* app background */
+  --color-slate-900: #ffffff; /* cards / panels */
+  --color-slate-800: #e2e8f0; /* borders, subtle fills */
+  --color-slate-700: #cbd5e1; /* stronger borders */
+  --color-slate-600: #94a3b8;
+  /* Text (were lightest) -> now darkest */
+  --color-slate-500: #64748b; /* muted */
+  --color-slate-400: #475569; /* secondary text */
+  --color-slate-300: #334155; /* body text */
+  --color-slate-200: #1e293b;
+  --color-slate-100: #0f172a;
+  --color-slate-50: #020617;
+  /* text-white is the primary text colour throughout, so it has to darken */
+  --color-white: #0f172a;
+}
+
+/* bg-white must stay white even though --color-white now reads dark. */
+[data-theme='light'] .bg-white {
+  background-color: #ffffff;
+}
+
+/* text-slate-950/900 is used as DARK text on bright amber/emerald chips and
+   buttons. The inverted ramp would turn it white, so pin it back to dark. */
+[data-theme='light'] .text-slate-950,
+[data-theme='light'] .text-slate-900 {
+  color: #0f172a;
+}
+
+/* Conversely, text-white sitting on a saturated or gradient background is
+   genuinely meant to be white — keep it that way. */
+[data-theme='light'] .text-white:is(
+    [class*='bg-emerald-'], [class*='bg-green-'], [class*='bg-teal-'],
+    [class*='bg-cyan-'], [class*='bg-sky-'], [class*='bg-blue-'],
+    [class*='bg-indigo-'], [class*='bg-violet-'], [class*='bg-purple-'],
+    [class*='bg-fuchsia-'], [class*='bg-pink-'], [class*='bg-rose-'],
+    [class*='bg-red-'], [class*='bg-orange-'], [class*='bg-amber-'],
+    [class*='from-']
+  ) {
+  color: #ffffff;
+}
+
+/* Shadows tuned for dark surfaces read as heavy smudges on white. */
+[data-theme='light'] .shadow-lg,
+[data-theme='light'] .shadow-xl,
+[data-theme='light'] .shadow-2xl {
+  box-shadow: 0 4px 16px rgb(15 23 42 / 8%), 0 1px 3px rgb(15 23 42 / 6%);
+}
+
+[data-theme='light'] .pos-scroll::-webkit-scrollbar-track {
+  background: rgb(226 232 240 / 60%);
+}
+
+html {
+  color-scheme: dark;
+}
+[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* Theme switch should feel deliberate, not jarring. */
+body,
+body * {
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+}
+
+/* ============================================================
+   CENTRAL INVENTORY — ANALYTICS CARDS
+   ------------------------------------------------------------
+   One card treatment shared by every card in the analytics view
+   (KPI tiles, chart panels and the period filter bar), so they
+   read as a set instead of each carrying its own ad-hoc stack of
+   utilities. Per-card colour comes from --card-accent.
+
+   Built on var(--color-slate-*) so these follow the light/dark
+   theme automatically.
+   ============================================================ */
+
+.analytics-card,
+.analytics-panel,
+.analytics-filter {
+  --card-accent: var(--color-slate-500);
+  position: relative;
+  overflow: hidden;
+  border-radius: 1rem;
+  background-color: var(--color-slate-900);
+  border: 1px solid var(--color-slate-800);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 20%), 0 8px 24px -12px rgb(0 0 0 / 45%);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+[data-theme='light'] .analytics-card,
+[data-theme='light'] .analytics-panel,
+[data-theme='light'] .analytics-filter {
+  box-shadow: 0 1px 2px rgb(15 23 42 / 4%), 0 8px 24px -14px rgb(15 23 42 / 18%);
+}
+
+/* Accent hairline across the top of every card. */
+.analytics-card::before,
+.analytics-panel::before,
+.analytics-filter::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--card-accent), transparent);
+  opacity: 0.55;
+  transition: opacity 180ms ease;
+}
+
+.analytics-card:hover,
+.analytics-panel:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--card-accent) 45%, transparent);
+  box-shadow: 0 4px 10px rgb(0 0 0 / 22%), 0 18px 40px -18px rgb(0 0 0 / 55%);
+}
+
+[data-theme='light'] .analytics-card:hover,
+[data-theme='light'] .analytics-panel:hover {
+  box-shadow: 0 4px 10px rgb(15 23 42 / 6%), 0 18px 40px -20px rgb(15 23 42 / 26%);
+}
+
+.analytics-card:hover::before,
+.analytics-panel:hover::before {
+  opacity: 1;
+}
+
+.analytics-card { padding: 1rem; }
+.analytics-panel { padding: 1.5rem; }
+
+@media (min-width: 1024px) {
+  .analytics-card { padding: 1.25rem; }
+  .analytics-panel { padding: 1.75rem; }
+}
+
+/* Tinted icon chip that picks up the card's accent. */
+.analytics-chip {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--card-accent);
+  background-color: color-mix(in srgb, var(--card-accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--card-accent) 22%, transparent);
+  transition: background-color 180ms ease;
+}
+
+.analytics-card:hover .analytics-chip,
+.analytics-panel:hover .analytics-chip {
+  background-color: color-mix(in srgb, var(--card-accent) 24%, transparent);
+}
+
+/* Rows inside the "Stock by Label" breakdown. */
+.analytics-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem;
+  border-radius: 0.75rem;
+  background-color: color-mix(in srgb, var(--color-slate-800) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-slate-800) 70%, transparent);
+  transition: background-color 160ms ease;
+}
+
+.analytics-row:hover {
+  background-color: color-mix(in srgb, var(--color-slate-800) 75%, transparent);
+}
+
+/* Empty states inside chart panels. */
+.analytics-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.75rem;
+  color: var(--color-slate-500);
+  background-color: color-mix(in srgb, var(--color-slate-800) 25%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--color-slate-700) 60%, transparent);
+}
