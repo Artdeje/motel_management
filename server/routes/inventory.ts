@@ -337,10 +337,11 @@ inventoryRouter.post('/inventory/transactions', authMiddleware, async (req: Requ
     return res.status(400).json({ error: 'Invalid transaction type' });
   }
 
-  // bartender cannot directly adjust inventory quantities (must use stock requests)
-  // Chef & Housekeeper manage their own department stock directly.
-  if (req.user?.role === 'bartender' && !['Consumed', 'Damaged'].includes(transaction_type)) {
-    return res.status(403).json({ error: 'Waiters cannot directly receive or adjust stock. Please use Supply Requests.' });
+  // Bartenders have read-only access to inventory: no receiving, no waste, no
+  // adjustment of any kind. Stock they need goes through a Supply Request that a
+  // manager approves. Chef & Housekeeper still manage their own department stock.
+  if (req.user?.role === 'bartender') {
+    return res.status(403).json({ error: 'Bartenders have view-only access to inventory. Please raise a Supply Request.' });
   }
 
   const item = await dbGet<any>('SELECT * FROM inventory_items WHERE id = ?', [item_id]);

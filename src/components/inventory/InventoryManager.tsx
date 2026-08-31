@@ -28,6 +28,7 @@ import {
   Wine,
   Wrench,
   ClipboardList,
+  Lock,
 } from 'lucide-react';
 import { formatCurrency, CURRENCY_SYMBOL } from '../../utils/currency';
 import { formatDateTimeCAT } from '../../utils/dates';
@@ -348,24 +349,30 @@ export const InventoryManager: React.FC = () => {
   });
 
   const canManage = user?.role === 'admin' || user?.role === 'manager';
+  // Bartenders are view-only on inventory. The API refuses every write from
+  // them (items are admin/manager/chef/housekeeper; transactions reject the
+  // role outright), so any control shown to them could only 403. Stock they
+  // need goes through a Supply Request instead.
+  const isViewOnlyInventory = user?.role === 'bartender';
   const canEditItem = (it: any) => {
+    if (isViewOnlyInventory) return false;
     if (canManage) return true;
     if (user?.role === 'chef' && it.department === 'Kitchen') return true;
     if (user?.role === 'housekeeper' && it.department === 'Housekeeping') return true;
-    if (user?.role === 'bartender' && it.department === 'Bar') return true;
     return false;
   };
   const canDeleteItem = (it: any) => {
+    if (isViewOnlyInventory) return false;
     if (user?.role === 'admin' || user?.role === 'manager') return true;
     if (user?.role === 'chef' && it.department === 'Kitchen') return true;
     if (user?.role === 'housekeeper' && it.department === 'Housekeeping') return true;
     return false;
   };
   const canReceiveStock = (it: any) => {
+    if (isViewOnlyInventory) return false;
     if (user?.role === 'admin' || user?.role === 'manager') return true;
     if (user?.role === 'chef' && it.department === 'Kitchen') return true;
     if (user?.role === 'housekeeper' && it.department === 'Housekeeping') return true;
-    if (user?.role === 'bartender' && it.department === 'Bar') return true;
     return false;
   };
   const visibleCategories = categories.filter(c => ['Drink','Kitchen ingredient','Tools'].includes(c.name));
@@ -420,9 +427,19 @@ export const InventoryManager: React.FC = () => {
               <Plus className="w-3.5 h-3.5" /> Add Item
             </button>
           )}
-          <button onClick={()=> setShowAddStockModal(true)} className="px-3.5 lg:px-4 py-2 lg:py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs lg:text-sm rounded-xl shadow flex items-center gap-1.5 whitespace-nowrap">
-            <TrendingUp className="w-3.5 h-3.5"/> Add Stock
-          </button>
+          {!isViewOnlyInventory && (
+            <button onClick={()=> setShowAddStockModal(true)} className="px-3.5 lg:px-4 py-2 lg:py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs lg:text-sm rounded-xl shadow flex items-center gap-1.5 whitespace-nowrap">
+              <TrendingUp className="w-3.5 h-3.5"/> Add Stock
+            </button>
+          )}
+          {isViewOnlyInventory && (
+            <span
+              className="px-3 py-2 bg-slate-800/60 text-slate-400 border border-slate-700/60 font-bold text-[11px] rounded-xl flex items-center gap-1.5 whitespace-nowrap cursor-default"
+              title="Bartenders can view stock levels. To bring in stock, raise a Supply Request for a manager to approve."
+            >
+              <Lock className="w-3.5 h-3.5"/> View only
+            </span>
+          )}
           <button onClick={()=>{fetchInventory(); fetchAnalytics(analyticsPeriod);}} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 whitespace-nowrap">
             <RefreshCw className="w-3.5 h-3.5"/> <span className="hidden sm:inline">Refresh</span>
           </button>

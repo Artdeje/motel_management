@@ -449,11 +449,12 @@ ordersRouter.put('/orders/:id/status', authMiddleware, requireRoles(['admin', 'm
     return res.status(403).json({ error: 'Access denied. You can only update your own orders.' });
   }
 
-  // Waiters can only transition to specific statuses (not arbitrary workflow jumps)
+  // Bartenders run their own service end to end — serve, take payment, close —
+  // but never the kitchen workflow (Confirmed/Preparing/Ready stay with the chef).
   if (req.user!.role === 'bartender') {
-    const waiterAllowedStatuses = ['Cancelled'];
-    if (!waiterAllowedStatuses.includes(status)) {
-      return res.status(403).json({ error: 'Waiters can only cancel orders. Other status changes require manager/chef action.' });
+    const bartenderAllowedStatuses = ['Served', 'Completed', 'Cancelled'];
+    if (!bartenderAllowedStatuses.includes(status)) {
+      return res.status(403).json({ error: 'Bartenders can serve, complete or cancel their own orders. Kitchen preparation steps require chef/manager action.' });
     }
   }
 
@@ -603,11 +604,20 @@ ordersRouter.delete('/orders/:id', authMiddleware, requireRoles(['admin']), asyn
 });
 
 // POST /api/orders/:id/pay - Record payment for order directly
-ordersRouter.post('/orders/:id/pay', authMiddleware, requireRoles(['admin', 'manager']), async (req: Request, res: Response) => {
+ordersRouter.post('/orders/:id/pay', authMiddleware, requireRoles(['admin', 'manager', 'bartender']), async (req: Request, res: Response) => {
   const { payment_method } = req.body;
   const order = await dbGet<any>('SELECT * FROM orders WHERE id = ?', [req.params.id]);
   if (!order) {
     return res.status(404).json({ error: 'Order not found' });
+  }
+
+  // A bartender settles only the orders they raised.
+  if (req.user!.role === 'bartender' && order.waiter_id !== req.user!.id) {
+    return res.status(403).json({ error: 'You can only take payment for your own orders' });
+  }
+
+  if (order.payment_status === 'Paid') {
+    return res.status(400).json({ error: `Order #${order.order_number} is already paid` });
   }
 
   const payId = `pay-${Date.now()}`;
