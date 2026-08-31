@@ -80,7 +80,7 @@ export const KitchenMenuControl: React.FC = () => {
       // Reactivate
       try {
         await api.updateMenuAvailability(item.id, { is_available: true });
-        success(`"${item.name}" Reactivated`, 'Waiters can now order this dish again.');
+        success(`"${item.name}" Reactivated`, 'Bartenders can now order this dish again.');
         fetchMenuItems();
       } catch (err: any) {
         error('Reactivation failed', err.message);
@@ -458,7 +458,7 @@ export const KitchenMenuControl: React.FC = () => {
               Deactivate "{activeItemToDeactivate.name}"
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Specify the reason why this item is temporarily unavailable so waiters and guests are notified.
+              Specify the reason why this item is temporarily unavailable so bartenders and guests are notified.
             </p>
 
             <form onSubmit={handleConfirmDeactivation} className="mt-4 space-y-4">
@@ -688,7 +688,7 @@ export const KitchenMenuControl: React.FC = () => {
               Drop "{itemToDelete.name}"
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              This removes the dish from the menu permanently (including its recipe links). Waiters will no longer
+              This removes the dish from the menu permanently (including its recipe links). Bartenders will no longer
               be able to order it. This action cannot be undone.
             </p>
 

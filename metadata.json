@@ -1,6 +1,6 @@
 {
   "name": "Motel Management & Information System",
-  "description": "Comprehensive motel operations, guest reservations, inventory, kitchen chef availability controls, waiter menu ordering, housekeeping workflow, staff scheduling, and financial analytics.",
+  "description": "Comprehensive motel operations, guest reservations, inventory, kitchen chef availability controls, bartender menu ordering, housekeeping workflow, staff scheduling, and financial analytics.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

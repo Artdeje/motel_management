@@ -20,7 +20,7 @@ ordersRouter.get('/orders', authMiddleware, async (req: Request, res: Response) 
   const params: any[] = [];
 
   // Per-user isolation: waiters only see their own orders
-  if (req.user!.role === 'waiter') {
+  if (req.user!.role === 'bartender') {
     query += ' AND o.waiter_id = ?';
     params.push(req.user!.id);
   }
@@ -29,7 +29,7 @@ ordersRouter.get('/orders', authMiddleware, async (req: Request, res: Response) 
     query += ' AND o.status = ?';
     params.push(status);
   }
-  if (waiter_id && req.user!.role !== 'waiter') {
+  if (waiter_id && req.user!.role !== 'bartender') {
     query += ' AND o.waiter_id = ?';
     params.push(waiter_id);
   }
@@ -82,7 +82,7 @@ ordersRouter.get('/orders/:id', authMiddleware, async (req: Request, res: Respon
   }
 
   // Waiters can only view their own orders (IDOR protection)
-  if (req.user!.role === 'waiter' && order.waiter_id !== req.user!.id) {
+  if (req.user!.role === 'bartender' && order.waiter_id !== req.user!.id) {
     return res.status(403).json({ error: 'Access denied. You can only view your own orders.' });
   }
 
@@ -91,7 +91,7 @@ ordersRouter.get('/orders/:id', authMiddleware, async (req: Request, res: Respon
 });
 
 // POST /api/orders - Create order with strict transactional stock validation & reservation
-ordersRouter.post('/orders', authMiddleware, requireRoles(['admin', 'manager', 'waiter']), async (req: Request, res: Response) => {
+ordersRouter.post('/orders', authMiddleware, requireRoles(['admin', 'manager', 'bartender']), async (req: Request, res: Response) => {
   const { order_type, table_number, room_id, guest_id, items, payment_status, notes, discount } = req.body;
 
   if (!order_type || !items || !Array.isArray(items) || items.length === 0) {
@@ -213,7 +213,7 @@ ordersRouter.post('/orders', authMiddleware, requireRoles(['admin', 'manager', '
       createNotification(
         'new_order',
         `New Order #${orderNumber} (${order_type})`,
-        `Order with ${orderItemsToInsert.length} item(s) placed by Waiter ${req.user?.full_name}.`,
+        `Order with ${orderItemsToInsert.length} item(s) placed by bartender ${req.user?.full_name}.`,
         'chef',
         null,
         '/kitchen'
@@ -235,14 +235,14 @@ ordersRouter.post('/orders', authMiddleware, requireRoles(['admin', 'manager', '
 });
 
 // PUT /api/orders/:id - Edit order items and details before cooking starts
-ordersRouter.put('/orders/:id', authMiddleware, requireRoles(['admin', 'manager', 'waiter']), async (req: Request, res: Response) => {
+ordersRouter.put('/orders/:id', authMiddleware, requireRoles(['admin', 'manager', 'bartender']), async (req: Request, res: Response) => {
   const order = await dbGet<any>('SELECT * FROM orders WHERE id = ?', [req.params.id]);
   if (!order) {
     return res.status(404).json({ error: 'Order not found' });
   }
 
   // Ownership check: waiters can only edit their own orders
-  if (req.user!.role === 'waiter' && order.waiter_id !== req.user!.id) {
+  if (req.user!.role === 'bartender' && order.waiter_id !== req.user!.id) {
     return res.status(403).json({ error: 'You can only edit your own orders' });
   }
 
@@ -432,7 +432,7 @@ ordersRouter.put('/orders/:id', authMiddleware, requireRoles(['admin', 'manager'
 });
 
 // PUT /api/orders/:id/status - Update order status (with automatic stock consumption / release)
-ordersRouter.put('/orders/:id/status', authMiddleware, requireRoles(['admin', 'manager', 'chef', 'waiter']), async (req: Request, res: Response) => {
+ordersRouter.put('/orders/:id/status', authMiddleware, requireRoles(['admin', 'manager', 'chef', 'bartender']), async (req: Request, res: Response) => {
   const { status } = req.body;
   const validStatuses = ['Pending', 'Confirmed', 'Preparing', 'Ready', 'Served', 'Completed', 'Cancelled'];
   if (!validStatuses.includes(status)) {
@@ -445,12 +445,12 @@ ordersRouter.put('/orders/:id/status', authMiddleware, requireRoles(['admin', 'm
   }
 
   // Waiters can only update their own orders
-  if (req.user!.role === 'waiter' && order.waiter_id !== req.user!.id) {
+  if (req.user!.role === 'bartender' && order.waiter_id !== req.user!.id) {
     return res.status(403).json({ error: 'Access denied. You can only update your own orders.' });
   }
 
   // Waiters can only transition to specific statuses (not arbitrary workflow jumps)
-  if (req.user!.role === 'waiter') {
+  if (req.user!.role === 'bartender') {
     const waiterAllowedStatuses = ['Cancelled'];
     if (!waiterAllowedStatuses.includes(status)) {
       return res.status(403).json({ error: 'Waiters can only cancel orders. Other status changes require manager/chef action.' });

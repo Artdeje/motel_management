@@ -34,7 +34,7 @@ export const UserManagement: React.FC = () => {
     full_name: '',
     email: '',
     phone: '',
-    role: 'waiter',
+    role: 'bartender',
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -76,7 +76,7 @@ export const UserManagement: React.FC = () => {
         full_name: '',
         email: '',
         phone: '',
-        role: 'waiter',
+        role: 'bartender',
       });
       fetchUsers();
     } catch (err: any) {
@@ -126,7 +126,7 @@ export const UserManagement: React.FC = () => {
         full_name: '',
         email: '',
         phone: '',
-        role: 'waiter',
+        role: 'bartender',
       });
       fetchUsers();
     } catch (err: any) {
@@ -168,7 +168,7 @@ export const UserManagement: React.FC = () => {
         return 'bg-blue-500/20 text-blue-300 border-blue-500/30';
       case 'chef':
         return 'bg-amber-500/20 text-amber-300 border-amber-500/30';
-      case 'waiter':
+      case 'bartender':
         return 'bg-rose-500/20 text-rose-300 border-rose-500/30';
       case 'housekeeper':
         return 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
@@ -188,7 +188,7 @@ export const UserManagement: React.FC = () => {
           <div>
             <h2 className="text-xl font-bold text-white tracking-tight">Staff Accounts & Access Control</h2>
             <p className="text-xs text-slate-400 mt-0.5">
-              Role-Based Access Control (RBAC): Administrator, Manager, Kitchen Chef, Housekeeper & Waiter.
+              Role-Based Access Control (RBAC): Administrator, Manager, Kitchen Chef, Housekeeper & bartender.
             </p>
           </div>
         </div>
@@ -347,7 +347,7 @@ export const UserManagement: React.FC = () => {
                   onChange={(e) => setForm({ ...form, role: e.target.value })}
                   className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
                 >
-                  <option value="waiter">Waiter (Table & Room Service POS)</option>
+                  <option value="bartender">bartender (Table & Room Service POS)</option>
                   <option value="chef">Kitchen Chef (Food Orders & Item Deactivation)</option>
                   <option value="housekeeper">Housekeeper (Room Cleaning & Maintenance)</option>
                   <option value="manager">Manager (Front Desk, Approvals & Operations)</option>

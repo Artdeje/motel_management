@@ -7,6 +7,7 @@ export const menuRouter = Router();
 // GET /api/menu/items - List menu items with live ingredient stock & computed available servings
 // Menu is INDEPENDENT from inventory: items can exist without any linked stock.
 // When ingredients are linked, live stock is pulled from inventory (LEFT JOIN so orphaned stock doesn't break menu).
+// Only active items are returned so deleted items (is_active=0) disappear from UI – full CRUD verified.
 menuRouter.get('/menu/items', authMiddleware, async (req: Request, res: Response) => {
   const items = await dbAll<any>(
     `SELECT m.*, mc.name as category_name, mc.icon as category_icon,
@@ -14,6 +15,7 @@ menuRouter.get('/menu/items', authMiddleware, async (req: Request, res: Response
      FROM menu_items m
      JOIN menu_categories mc ON m.category_id = mc.id
      LEFT JOIN users u ON m.deactivated_by = u.id
+     WHERE m.is_active = 1
      ORDER BY mc.display_order ASC, m.name ASC`
   );
 

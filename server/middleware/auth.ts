@@ -52,7 +52,7 @@ export interface AuthenticatedUser {
   id: string;
   username: string;
   full_name: string;
-  role: 'admin' | 'manager' | 'chef' | 'housekeeper' | 'waiter';
+  role: 'admin' | 'manager' | 'chef' | 'housekeeper' | 'bartender';
   role_id: string;
 }
 

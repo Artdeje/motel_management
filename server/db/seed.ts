@@ -15,7 +15,7 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
   const managerPass = bcrypt.hashSync('manager123', salt);
   const chefPass = bcrypt.hashSync('chef123', salt);
   const housePass = bcrypt.hashSync('housekeeper123', salt);
-  const waiterPass = bcrypt.hashSync('waiter123', salt);
+  const bartenderPass = bcrypt.hashSync('bartender123', salt);
 
   await dbTransaction(async () => {
     // 1. Roles
@@ -24,7 +24,7 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       { id: 'role-manager', name: 'manager', display_name: 'Manager', description: 'Daily motel operations, front-desk, pricing, inventory approval, finance' },
       { id: 'role-chef', name: 'chef', display_name: 'Kitchen Chef', description: 'Food preparation, kitchen inventory, recipe availability controls' },
       { id: 'role-housekeeper', name: 'housekeeper', display_name: 'Housekeeper', description: 'Room cleaning, linen/cleaning supplies requests, damage reporting' },
-      { id: 'role-waiter', name: 'waiter', display_name: 'Waiter', description: 'Menu ordering, bar operations, table/room service, order management' },
+      { id: 'role-bartender', name: 'bartender', display_name: 'Bartender', description: 'Bar operations, drink service, table/room service, order management' },
     ];
 
     for (const r of roles) {
@@ -39,7 +39,7 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       { id: 'usr-manager', username: 'manager', email: 'manager@motel.com', pass: managerPass, name: 'Claire Bennett', role_id: 'role-manager', phone: '+250 788 222 333' },
       { id: 'usr-chef', username: 'chef', email: 'chef@motel.com', pass: chefPass, name: 'Chef Jean Luc', role_id: 'role-chef', phone: '+250 788 333 444' },
       { id: 'usr-housekeeper', username: 'housekeeper', email: 'housekeeper@motel.com', pass: housePass, name: 'Marie Mutoni', role_id: 'role-housekeeper', phone: '+250 788 444 555' },
-      { id: 'usr-waiter', username: 'waiter', email: 'waiter@motel.com', pass: waiterPass, name: 'Patrick Habineza', role_id: 'role-waiter', phone: '+250 788 555 666' },
+      { id: 'usr-bartender', username: 'bartender', email: 'bartender@motel.com', pass: bartenderPass, name: 'Patrick Habineza', role_id: 'role-bartender', phone: '+250 788 555 666' },
     ];
 
     for (const u of users) {
@@ -293,14 +293,14 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
 
     // 13. Orders & Order Items
     const orders = [
-      { id: 'ord-001', num: 'ORD-2026-001', type: 'Table', table: 'Table 4', room_id: null, guest_id: null, waiter: 'usr-waiter', status: 'Completed', pay_stat: 'Paid', subtotal: 27500, disc: 0, tax: 0, total: 27500, reserved: 0, consumed: 1 },
-      { id: 'ord-002', num: 'ORD-2026-002', type: 'Room Service', table: null, room_id: 'rm-102', guest_id: 'gst-001', waiter: 'usr-waiter', status: 'Preparing', pay_stat: 'ChargedToRoom', subtotal: 16500, disc: 0, tax: 0, total: 16500, reserved: 1, consumed: 0 },
-      { id: 'ord-003', num: 'ORD-2026-003', type: 'Table', table: 'Table 2', room_id: null, guest_id: null, waiter: 'usr-waiter', status: 'Pending', pay_stat: 'Unpaid', subtotal: 9000, disc: 0, tax: 0, total: 9000, reserved: 1, consumed: 0 },
+      { id: 'ord-001', num: 'ORD-2026-001', type: 'Table', table: 'Table 4', room_id: null, guest_id: null, bartender: 'usr-bartender', status: 'Completed', pay_stat: 'Paid', subtotal: 27500, disc: 0, tax: 0, total: 27500, reserved: 0, consumed: 1 },
+      { id: 'ord-002', num: 'ORD-2026-002', type: 'Room Service', table: null, room_id: 'rm-102', guest_id: 'gst-001', bartender: 'usr-bartender', status: 'Preparing', pay_stat: 'ChargedToRoom', subtotal: 16500, disc: 0, tax: 0, total: 16500, reserved: 1, consumed: 0 },
+      { id: 'ord-003', num: 'ORD-2026-003', type: 'Table', table: 'Table 2', room_id: null, guest_id: null, bartender: 'usr-bartender', status: 'Pending', pay_stat: 'Unpaid', subtotal: 9000, disc: 0, tax: 0, total: 9000, reserved: 1, consumed: 0 },
     ];
 
     for (const o of orders) {
       await dbRun('INSERT IGNORE INTO orders (id, order_number, order_type, table_number, room_id, guest_id, waiter_id, status, payment_status, subtotal, discount, tax, total_amount, stock_reserved, stock_consumed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-        o.id, o.num, o.type, o.table, o.room_id, o.guest_id, o.waiter, o.status, o.pay_stat, o.subtotal, o.disc, o.tax, o.total, o.reserved, o.consumed
+        o.id, o.num, o.type, o.table, o.room_id, o.guest_id, o.bartender, o.status, o.pay_stat, o.subtotal, o.disc, o.tax, o.total, o.reserved, o.consumed
       ]);
     }
 
@@ -328,7 +328,7 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
     const stockRequests = [
       { id: 'sr-001', num: 'REQ-2026-001', dept: 'Kitchen', by: 'usr-chef', status: 'Pending', priority: 'Urgent', reason: 'Fresh Tilapia fillets exhausted over the weekend rush' },
       { id: 'sr-002', num: 'REQ-2026-002', dept: 'Housekeeping', by: 'usr-housekeeper', status: 'Approved', priority: 'Normal', reason: 'Guest bathroom soaps for 2nd floor rooms' },
-      { id: 'sr-003', num: 'REQ-2026-003', dept: 'Bar', by: 'usr-waiter', status: 'Pending', priority: 'Normal', reason: 'Fresh orange juice inventory approaching minimum stock' },
+      { id: 'sr-003', num: 'REQ-2026-003', dept: 'Bar', by: 'usr-bartender', status: 'Pending', priority: 'Normal', reason: 'Fresh orange juice inventory approaching minimum stock' },
     ];
 
     for (const sr of stockRequests) {
@@ -352,11 +352,11 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
     // 15. Staff Shifts & Attendance
     const shifts = [
       { id: 'sh-001', user_id: 'usr-chef', date: '2026-08-14', start: '06:30', end: '15:00', type: 'Morning', dept: 'Kitchen' },
-      { id: 'sh-002', user_id: 'usr-waiter', date: '2026-08-14', start: '07:00', end: '16:00', type: 'Morning', dept: 'Restaurant/Bar' },
+      { id: 'sh-002', user_id: 'usr-bartender', date: '2026-08-14', start: '07:00', end: '16:00', type: 'Morning', dept: 'Restaurant/Bar' },
       { id: 'sh-003', user_id: 'usr-housekeeper', date: '2026-08-14', start: '08:00', end: '16:30', type: 'Morning', dept: 'Housekeeping' },
       { id: 'sh-004', user_id: 'usr-manager', date: '2026-08-14', start: '08:00', end: '18:00', type: 'Full Day', dept: 'Management' },
       { id: 'sh-005', user_id: 'usr-chef', date: '2026-08-15', start: '11:00', end: '20:00', type: 'Afternoon', dept: 'Kitchen' },
-      { id: 'sh-006', user_id: 'usr-waiter', date: '2026-08-15', start: '12:00', end: '21:00', type: 'Afternoon', dept: 'Restaurant/Bar' },
+      { id: 'sh-006', user_id: 'usr-bartender', date: '2026-08-15', start: '12:00', end: '21:00', type: 'Afternoon', dept: 'Restaurant/Bar' },
     ];
 
     for (const sh of shifts) {
@@ -367,7 +367,7 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
 
     const attendanceRecords = [
       { id: 'att-001', user_id: 'usr-chef', date: '2026-08-14', in_time: '2026-08-14 06:28:00', out_time: null, break_min: 30, total: 0, stat: 'Present' },
-      { id: 'att-002', user_id: 'usr-waiter', date: '2026-08-14', in_time: '2026-08-14 06:55:00', out_time: null, break_min: 0, total: 0, stat: 'Present' },
+      { id: 'att-002', user_id: 'usr-bartender', date: '2026-08-14', in_time: '2026-08-14 06:55:00', out_time: null, break_min: 0, total: 0, stat: 'Present' },
       { id: 'att-003', user_id: 'usr-housekeeper', date: '2026-08-14', in_time: '2026-08-14 08:02:00', out_time: null, break_min: 0, total: 0, stat: 'Present' },
       { id: 'att-004', user_id: 'usr-manager', date: '2026-08-14', in_time: '2026-08-14 07:50:00', out_time: null, break_min: 0, total: 0, stat: 'Present' },
     ];
@@ -395,7 +395,7 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       { id: 'pay-001', rec_num: 'RCT-2026-001', inv_id: 'inv-rec-1', order_id: null, guest_id: 'gst-001', amt: 55000, method: 'Credit Card', cat: 'Deposit', by: 'usr-manager' },
       { id: 'pay-002', rec_num: 'RCT-2026-002', inv_id: 'inv-rec-2', order_id: null, guest_id: 'gst-002', amt: 100000, method: 'Mobile Money', cat: 'Deposit', by: 'usr-manager' },
       { id: 'pay-003', rec_num: 'RCT-2026-003', inv_id: 'inv-rec-3', order_id: null, guest_id: 'gst-003', amt: 200000, method: 'Bank Transfer', cat: 'Deposit', by: 'usr-manager' },
-      { id: 'pay-004', rec_num: 'RCT-2026-004', inv_id: null, order_id: 'ord-001', guest_id: null, amt: 27500, method: 'Cash', cat: 'Food', by: 'usr-waiter' },
+      { id: 'pay-004', rec_num: 'RCT-2026-004', inv_id: null, order_id: 'ord-001', guest_id: null, amt: 27500, method: 'Cash', cat: 'Food', by: 'usr-bartender' },
     ];
 
     for (const p of payments) {
@@ -450,7 +450,7 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
     const auditLogs = [
       { id: 'aud-001', uid: 'usr-admin', uname: 'admin', role: 'admin', module: 'Auth', action: 'Login', rec: 'usr-admin', det: 'Administrator logged into system from web console' },
       { id: 'aud-002', uid: 'usr-chef', uname: 'chef', role: 'chef', module: 'Menu', action: 'Status Change', rec: 'menu-fish-tilapia', det: 'Deactivated "Chef Special Grilled Tilapia" (Reason: Tilapia fillet out of stock)' },
-      { id: 'aud-003', uid: 'usr-waiter', uname: 'waiter', role: 'waiter', module: 'Orders', action: 'Created', rec: 'ord-002', det: 'Created Room Service order ORD-2026-002 for Room 102 (FRw16500)' },
+      { id: 'aud-003', uid: 'usr-bartender', uname: 'bartender', role: 'bartender', module: 'Orders', action: 'Created', rec: 'ord-002', det: 'Created Room Service order ORD-2026-002 for Room 102 (FRw16500)' },
       { id: 'aud-004', uid: 'usr-manager', uname: 'manager', role: 'manager', module: 'Rooms', action: 'Status Change', rec: 'rm-102', det: 'Checked in Guest John Smith to Room 102' },
       { id: 'aud-005', uid: 'usr-manager', uname: 'manager', role: 'manager', module: 'Inventory', action: 'Approval', rec: 'sr-002', det: 'Approved stock request REQ-2026-002 for 50 Guest Botanical Soaps' },
     ];

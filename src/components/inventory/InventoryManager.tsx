@@ -346,7 +346,7 @@ export const InventoryManager: React.FC = () => {
     if (canManage) return true;
     if (user?.role === 'chef' && it.department === 'Kitchen') return true;
     if (user?.role === 'housekeeper' && it.department === 'Housekeeping') return true;
-    if (user?.role === 'waiter' && it.department === 'Bar') return true;
+    if (user?.role === 'bartender' && it.department === 'Bar') return true;
     return false;
   };
   const canDeleteItem = (it: any) => {
@@ -359,7 +359,7 @@ export const InventoryManager: React.FC = () => {
     if (user?.role === 'admin' || user?.role === 'manager') return true;
     if (user?.role === 'chef' && it.department === 'Kitchen') return true;
     if (user?.role === 'housekeeper' && it.department === 'Housekeeping') return true;
-    if (user?.role === 'waiter' && it.department === 'Bar') return true;
+    if (user?.role === 'bartender' && it.department === 'Bar') return true;
     return false;
   };
   const visibleCategories = categories.filter(c => ['Drink','Food','Kitchen ingredient','Tools'].includes(c.name));

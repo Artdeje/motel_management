@@ -416,6 +416,9 @@ async function runMigrationsMySql(p: MySqlPool): Promise<void> {
     }
   }
   console.log("[DB] CMS default settings verified (MySQL)");
+  // Migrate waiter -> bartender (company operations) - keep role id for FK safety
+  try { await p.query("UPDATE roles SET name='bartender', display_name='Bartender', description='Bar operations, drink service, table/room service, order management' WHERE name='waiter'"); console.log("[DB] Migrated role waiter -> bartender (MySQL)"); } catch {}
+  try { await p.query("UPDATE users SET username='bartender', email='bartender@motel.com' WHERE username='waiter'"); } catch {}
   const [tbRows] = await p.query(
     "SELECT COUNT(*) as cnt FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = 'token_blacklist'",
   );
@@ -568,7 +571,9 @@ async function runMigrationsPg(p: PgPool): Promise<void> {
     }
   }
   console.log("[DB] CMS default settings verified (PG)");
-
+  // Migrate waiter -> bartender (company operations) - keep role id for FK safety, seed will ensure role-bartender exists for new installs
+  try { await p.query("UPDATE roles SET name='bartender', display_name='Bartender', description='Bar operations, drink service, table/room service, order management' WHERE name='waiter'"); console.log("[DB] Migrated role waiter -> bartender (PG)"); } catch {}
+  try { await p.query("UPDATE users SET username='bartender', email='bartender@motel.com' WHERE username='waiter'"); } catch {}
   const tbCheck = await p.query(
     `SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='token_blacklist'`,
   );

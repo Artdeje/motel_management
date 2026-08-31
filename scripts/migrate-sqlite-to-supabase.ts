@@ -240,7 +240,7 @@ async function seedFreshIfEmpty(): Promise<void> {
   const managerPass = bcrypt.hashSync("manager123", salt);
   const chefPass = bcrypt.hashSync("chef123", salt);
   const housePass = bcrypt.hashSync("housekeeper123", salt);
-  const waiterPass = bcrypt.hashSync("waiter123", salt);
+  const bartenderPass = bcrypt.hashSync("bartender123", salt);
 
   const client = await pool.connect();
   try {
@@ -273,7 +273,7 @@ async function seedFreshIfEmpty(): Promise<void> {
       { id: "role-manager", name: "manager", display_name: "Manager", description: "Daily motel operations, front-desk, pricing, inventory approval, finance" },
       { id: "role-chef", name: "chef", display_name: "Kitchen Chef", description: "Food preparation, kitchen inventory, recipe availability controls" },
       { id: "role-housekeeper", name: "housekeeper", display_name: "Housekeeper", description: "Room cleaning, linen/cleaning supplies requests, damage reporting" },
-      { id: "role-waiter", name: "waiter", display_name: "Waiter", description: "Menu ordering, bar operations, table/room service, order management" },
+      { id: "role-bartender", name: "bartender", display_name: "Bartender", description: "Bar operations, drink service, table/room service, order management" },
     ]) {
       await pgRun("INSERT IGNORE INTO roles (id, name, display_name, description) VALUES (?, ?, ?, ?)", [r.id, r.name, r.display_name, r.description]);
     }
@@ -282,7 +282,7 @@ async function seedFreshIfEmpty(): Promise<void> {
       { id: "usr-manager", username: "manager", email: "manager@motel.com", pass: managerPass, name: "Claire Bennett", role_id: "role-manager", phone: "+250 788 222 333" },
       { id: "usr-chef", username: "chef", email: "chef@motel.com", pass: chefPass, name: "Chef Jean Luc", role_id: "role-chef", phone: "+250 788 333 444" },
       { id: "usr-housekeeper", username: "housekeeper", email: "housekeeper@motel.com", pass: housePass, name: "Marie Mutoni", role_id: "role-housekeeper", phone: "+250 788 444 555" },
-      { id: "usr-waiter", username: "waiter", email: "waiter@motel.com", pass: waiterPass, name: "Patrick Habineza", role_id: "role-waiter", phone: "+250 788 555 666" },
+      { id: "usr-bartender", username: "bartender", email: "bartender@motel.com", pass: bartenderPass, name: "Patrick Habineza", role_id: "role-bartender", phone: "+250 788 555 666" },
     ]) {
       await pgRun("INSERT IGNORE INTO users (id, username, email, password_hash, full_name, role_id, phone, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)", [u.id, u.username, u.email, u.pass, u.name, u.role_id, u.phone]);
     }

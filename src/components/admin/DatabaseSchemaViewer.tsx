@@ -33,7 +33,7 @@ export const DatabaseSchemaViewer: React.FC = () => {
         { name: 'username', type: 'VARCHAR(50)', key: 'UNI', nullable: 'NO', desc: 'Unique login handle' },
         { name: 'password_hash', type: 'VARCHAR(255)', key: '', nullable: 'NO', desc: 'Argon2 / BCrypt hash' },
         { name: 'full_name', type: 'VARCHAR(100)', key: '', nullable: 'NO', desc: 'Full display name' },
-        { name: 'role', type: "ENUM('admin','manager','chef','housekeeper','waiter')", key: 'IDX', nullable: 'NO', desc: 'System RBAC role' },
+        { name: 'role', type: "ENUM('admin','manager','chef','housekeeper','bartender')", key: 'IDX', nullable: 'NO', desc: 'System RBAC role' },
         { name: 'email', type: 'VARCHAR(100)', key: '', nullable: 'YES', desc: 'Staff email' },
         { name: 'phone', type: 'VARCHAR(30)', key: '', nullable: 'YES', desc: 'Staff contact phone' },
         { name: 'is_active', type: 'TINYINT(1)', key: '', nullable: 'NO', desc: 'Account active flag (1=active)' },
@@ -127,7 +127,7 @@ export const DatabaseSchemaViewer: React.FC = () => {
     {
       name: 'orders',
       category: 'F&B POS',
-      description: 'Food & Beverage customer tickets with waiter attribution & kitchen states',
+      description: 'Food & Beverage customer tickets with bartender attribution & kitchen states',
       columns: [
         { name: 'id', type: 'VARCHAR(36)', key: 'PK', nullable: 'NO', desc: 'UUID Primary Key' },
         { name: 'order_number', type: 'VARCHAR(20)', key: 'UNI', nullable: 'NO', desc: 'Order code (e.g. ORD-1001)' },
@@ -189,7 +189,7 @@ CREATE TABLE users (
   username VARCHAR(50) NOT NULL UNIQUE,
   password_hash VARCHAR(255) NOT NULL,
   full_name VARCHAR(100) NOT NULL,
-  role ENUM('admin', 'manager', 'chef', 'housekeeper', 'waiter') NOT NULL,
+  role ENUM('admin', 'manager', 'chef', 'housekeeper', 'bartender') NOT NULL,
   email VARCHAR(100),
   phone VARCHAR(30),
   is_active TINYINT(1) NOT NULL DEFAULT 1,

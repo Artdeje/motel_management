@@ -412,7 +412,7 @@ export const ChefDashboard: React.FC<ChefDashboardProps> = ({ onNavigate }) => {
 
                       <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
                         <span className="text-[10px] text-slate-400">
-                          Waiter: <strong className="text-slate-300">{ord.waiter_name}</strong>
+                          bartender: <strong className="text-slate-300">{ord.waiter_name}</strong>
                         </span>
 
                         {ord.status === 'Pending' || ord.status === 'Confirmed' ? (

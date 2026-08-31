@@ -3,7 +3,7 @@ import { useAuth } from '../../context/AuthContext';
 import { NavView } from '../layout/Sidebar';
 import { ManagerDashboard } from './ManagerDashboard';
 import { ChefDashboard } from './ChefDashboard';
-import { WaiterDashboard } from './WaiterDashboard';
+import { BartenderDashboard } from './BartenderDashboard';
 import { HousekeeperDashboard } from './HousekeeperDashboard';
 
 interface DashboardRouterProps {
@@ -18,8 +18,8 @@ export const DashboardRouter: React.FC<DashboardRouterProps> = ({ onNavigate }) 
     return <ChefDashboard onNavigate={onNavigate} />;
   }
 
-  if (role === 'waiter') {
-    return <WaiterDashboard onNavigate={onNavigate} />;
+  if (role === 'bartender') {
+    return <BartenderDashboard onNavigate={onNavigate} />;
   }
 
   if (role === 'housekeeper') {

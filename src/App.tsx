@@ -9,7 +9,7 @@ import { DashboardRouter } from './components/dashboard/DashboardRouter';
 import { RoomManagement } from './components/rooms/RoomManagement';
 import { ReservationManager } from './components/rooms/ReservationManager';
 import { GuestDirectory } from './components/guests/GuestDirectory';
-import { WaiterPOS } from './components/pos/WaiterPOS';
+import { BartenderPOS } from './components/pos/BartenderPOS';
 import { OrderManager } from './components/orders/OrderManager';
 import { KitchenMenuControl } from './components/kitchen/KitchenMenuControl';
 import { KitchenOrdersView } from './components/kitchen/KitchenOrdersView';
@@ -60,7 +60,7 @@ const MainAppContent: React.FC = () => {
       case 'guests':
         return <GuestDirectory />;
       case 'pos':
-        return <WaiterPOS />;
+        return <BartenderPOS />;
       case 'orders':
         return <OrderManager />;
       case 'kitchen-orders':

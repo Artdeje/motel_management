@@ -166,8 +166,8 @@ reportsRouter.get('/reports/summary', authMiddleware, requireRoles(['admin', 'ma
   }
 });
 
-// GET /api/reports/waiter-daily - Waiter daily performance summary
-reportsRouter.get('/waiter-daily', authMiddleware, async (req: Request, res: Response) => {
+// GET /api/reports/bartender-daily - bartender daily performance summary
+reportsRouter.get('/bartender-daily', authMiddleware, async (req: Request, res: Response) => {
   try {
     const userId = req.user?.id;
     if (!userId) {
@@ -273,7 +273,7 @@ reportsRouter.get('/waiter-daily', authMiddleware, async (req: Request, res: Res
       deptRevenue: deptData,
     });
   } catch (err: any) {
-    console.error('Waiter daily data error:', err);
-    return res.status(500).json({ error: 'Failed to load waiter daily data' });
+    console.error('bartender daily data error:', err);
+    return res.status(500).json({ error: 'Failed to load bartender daily data' });
   }
 });

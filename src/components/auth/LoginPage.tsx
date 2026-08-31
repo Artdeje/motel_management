@@ -27,7 +27,7 @@ const ROLE_ICONS: Record<string, any> = {
   manager: Building2,
   chef: Utensils,
   housekeeper: Sparkles,
-  waiter: ConciergeBell,
+  bartender: ConciergeBell,
 };
 
 const ROLE_COLORS: Record<string, string> = {
@@ -35,7 +35,7 @@ const ROLE_COLORS: Record<string, string> = {
   manager: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
   chef: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
   housekeeper: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-  waiter: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+  bartender: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
 };
 
 export const LoginPage: React.FC = () => {

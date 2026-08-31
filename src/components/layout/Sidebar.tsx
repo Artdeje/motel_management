@@ -25,7 +25,7 @@ import {
 
 export type NavView =
   | 'dashboard'
-  | 'waiter-dashboard'
+  | 'bartender-dashboard'
   | 'rooms'
   | 'reservations'
   | 'guests'
@@ -51,7 +51,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'chef', 'housekeeper', 'waiter'] },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'chef', 'housekeeper', 'bartender'] },
   
   // Front Desk & Rooms
   { id: 'rooms', label: 'Rooms & Front Desk', icon: BedDouble, roles: ['admin', 'manager'] },
@@ -59,13 +59,13 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'guests', label: 'Guest Directory', icon: Users, roles: ['admin', 'manager'] },
 
   // Food & Beverage / POS
-  { id: 'pos', label: 'Waiter POS', icon: ConciergeBell, roles: ['admin', 'waiter', 'manager'] },
-  { id: 'orders', label: 'Orders Queue', icon: Receipt, roles: ['admin', 'manager', 'waiter'] },
+  { id: 'pos', label: 'Bartender POS', icon: ConciergeBell, roles: ['admin', 'bartender', 'manager'] },
+  { id: 'orders', label: 'Orders Queue', icon: Receipt, roles: ['admin', 'manager', 'bartender'] },
   { id: 'kitchen-orders', label: 'Kitchen Orders', icon: ChefHat, roles: ['admin', 'manager', 'chef'] },
   { id: 'menu', label: 'Menu & Recipes', icon: UtensilsCrossed, roles: ['admin', 'manager', 'chef'] },
 
   // Inventory & Housekeeping
-  { id: 'inventory', label: 'Central Inventory', icon: Boxes, roles: ['admin', 'manager', 'chef', 'waiter', 'housekeeper'] },
+  { id: 'inventory', label: 'Central Inventory', icon: Boxes, roles: ['admin', 'manager', 'chef', 'bartender', 'housekeeper'] },
   { id: 'housekeeping', label: 'Housekeeping', icon: Sparkles, roles: ['admin', 'manager', 'housekeeper'] },
 
   // Finance & Reporting
@@ -149,7 +149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, onSelectView, col
             </p>
             <p className="text-slate-400 leading-snug">
               {currentRole === 'chef' && 'Deactivate out-of-stock items & monitor orders queue.'}
-              {currentRole === 'waiter' && 'POS shows live stock servings with atomic reservations.'}
+              {currentRole === 'bartender' && 'POS shows live stock servings with atomic reservations – Bar operations.'}
               {currentRole === 'housekeeper' && 'Track Dirty → Cleaning → Clean room lifecycle.'}
               {currentRole === 'manager' && 'Manage reservations, inventory requests & finance.'}
               {currentRole === 'admin' && 'Full system control, MySQL DDL schema & audit logs.'}

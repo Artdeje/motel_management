@@ -26,7 +26,7 @@ const ROLE_CONFIG: Record<UserRole, { label: string; badgeClass: string; icon: a
   manager: { label: 'General Manager', badgeClass: 'bg-blue-500/20 text-blue-300 border-blue-500/40', icon: Building2 },
   chef: { label: 'Kitchen Chef', badgeClass: 'bg-amber-500/20 text-amber-300 border-amber-500/40', icon: Utensils },
   housekeeper: { label: 'Housekeeper', badgeClass: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', icon: Sparkles },
-  waiter: { label: 'Waiter & Server', badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40', icon: ConciergeBell },
+  bartender: { label: 'Bartender', badgeClass: 'bg-rose-500/20 text-rose-300 border-rose-500/40', icon: ConciergeBell },
 };
 
 interface NavbarProps {

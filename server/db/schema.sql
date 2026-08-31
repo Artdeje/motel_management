@@ -246,7 +246,7 @@ CREATE TABLE IF NOT EXISTS menu_item_ingredients (
     FOREIGN KEY (inventory_item_id) REFERENCES inventory_items(id)
 );
 
--- 5. ORDERS & POS (WAITER & ROOM SERVICE)
+-- 5. ORDERS & POS (bartender & ROOM SERVICE)
 CREATE TABLE IF NOT EXISTS orders (
     id VARCHAR(36) PRIMARY KEY,
     order_number VARCHAR(30) NOT NULL UNIQUE,
@@ -457,7 +457,7 @@ CREATE TABLE IF NOT EXISTS notifications (
     type VARCHAR(50) NOT NULL, -- 'low_stock', 'new_order', 'order_status', 'check_in', 'maintenance', 'request'
     title VARCHAR(150) NOT NULL,
     message TEXT NOT NULL,
-    target_role VARCHAR(50), -- 'all', 'manager', 'admin', 'chef', 'housekeeper', 'waiter'
+    target_role VARCHAR(50), -- 'all', 'manager', 'admin', 'chef', 'housekeeper', 'bartender'
     target_user_id VARCHAR(36),
     is_read INTEGER DEFAULT 0,
     link VARCHAR(200),

@@ -228,7 +228,7 @@ export const OrderManager: React.FC = () => {
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Search order #, table, waiter..."
+            placeholder="Search order #, table, bartender..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-4 py-1.5 text-xs text-white placeholder:text-slate-500"
@@ -309,10 +309,10 @@ export const OrderManager: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Waiter & Payment Status */}
+                {/* bartender & Payment Status */}
                 <div className="flex items-center justify-between text-[11px] text-slate-400 py-1">
                   <span>
-                    Waiter: <strong className="text-slate-300">{ord.waiter_name}</strong>
+                    bartender: <strong className="text-slate-300">{ord.waiter_name}</strong>
                   </span>
                   <span
                     className={`font-semibold ${
@@ -334,7 +334,7 @@ export const OrderManager: React.FC = () => {
                     <Receipt className="w-3.5 h-3.5" /> Bill
                   </button>
 
-                  {/* Pre-cooking Edit Button for Waiters & Managers */}
+                  {/* Pre-cooking Edit Button for Bartenders & Managers */}
                   {['Pending', 'Confirmed'].includes(ord.status) ? (
                     <button
                       onClick={() => setEditingOrder(ord)}

@@ -140,7 +140,7 @@ inventoryRouter.get('/inventory/items', authMiddleware, async (req: Request, res
   } else if (role === 'housekeeper') {
     deptFilter = 'AND i.department = ?';
     deptParams = ['Housekeeping'];
-  } else if (role === 'waiter') {
+  } else if (role === 'bartender') {
     deptFilter = 'AND i.department = ?';
     deptParams = ['Bar'];
   }
@@ -311,9 +311,9 @@ inventoryRouter.post('/inventory/transactions', authMiddleware, async (req: Requ
     return res.status(400).json({ error: 'Invalid transaction type' });
   }
 
-  // Waiter cannot directly adjust inventory quantities (must use stock requests)
+  // bartender cannot directly adjust inventory quantities (must use stock requests)
   // Chef & Housekeeper manage their own department stock directly.
-  if (req.user?.role === 'waiter' && !['Consumed', 'Damaged'].includes(transaction_type)) {
+  if (req.user?.role === 'bartender' && !['Consumed', 'Damaged'].includes(transaction_type)) {
     return res.status(403).json({ error: 'Waiters cannot directly receive or adjust stock. Please use Supply Requests.' });
   }
 
@@ -407,7 +407,7 @@ inventoryRouter.get('/inventory/requests', authMiddleware, async (req: Request, 
   return res.json({ requests: enriched });
 });
 
-// POST /api/inventory/requests - Submit stock request (Chef, Waiter, Housekeeper)
+// POST /api/inventory/requests - Submit stock request (Chef, bartender, Housekeeper)
 inventoryRouter.post('/inventory/requests', authMiddleware, async (req: Request, res: Response) => {
   const { department, priority, reason, items } = req.body;
   if (!department || !items || !Array.isArray(items) || items.length === 0) {

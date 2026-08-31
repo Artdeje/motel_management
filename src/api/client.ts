@@ -131,7 +131,7 @@ export const api = {
   getMenuCategories: () => request('/api/menu/categories'),
   createMenuCategory: (cat: any) => request('/api/menu/categories', { method: 'POST', body: JSON.stringify(cat) }),
 
-  // Orders & Waiter POS
+  // Orders & bartender POS
   getOrders: (params?: any) => {
     const query = new URLSearchParams(params || {}).toString();
     return request(`/api/orders${query ? `?${query}` : ''}`);
@@ -194,7 +194,8 @@ export const api = {
     const p = typeof period === 'object' && period ? period.timeframe || period.period : period;
     return request(`/api/reports/summary${p ? `?period=${p}` : ''}`);
   },
-  getWaiterDailySummary: () => request('/api/reports/waiter-daily'),
+  getBartenderDailySummary: () => request('/api/reports/bartender-daily'),
+  getWaiterDailySummary: () => request('/api/reports/bartender-daily'), // alias for backwards compat
   getReportData: (period?: any) => {
     const p = typeof period === 'object' && period ? period.timeframe || period.period : period;
     return request(`/api/reports/summary${p ? `?period=${p}` : ''}`);

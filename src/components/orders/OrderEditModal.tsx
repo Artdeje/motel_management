@@ -272,7 +272,7 @@ export const OrderEditModal: React.FC<OrderEditModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Waiter: <strong className="text-slate-300">{order.waiter_name}</strong> • Placed at{' '}
+                bartender: <strong className="text-slate-300">{order.waiter_name}</strong> • Placed at{' '}
                 {formatTimeCAT(order.created_at)}
               </p>
             </div>
