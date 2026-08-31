@@ -442,23 +442,40 @@ export const InventoryManager: React.FC = () => {
         ))}
       </div>
 
-      {/* ANALYTICS TAB */}
+      {/* ANALYTICS TAB - Professional */}
       {activeTab==='analytics' && (
-        <div className="space-y-6">
-          {/* Period Filter + Export */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900/80 p-3 rounded-2xl border border-slate-800">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"><Filter className="w-3 h-3"/> Period:</span>
-              {(['24h','week','month','annual'] as const).map(p=>(
-                <button key={p} onClick={()=> setAnalyticsPeriod(p)} className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider ${analyticsPeriod===p?'bg-amber-500 text-slate-950':'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}>
-                  {p==='24h'?'24 Hours': p.charAt(0).toUpperCase()+p.slice(1)}
+        <div className="space-y-6 lg:space-y-8">
+          {/* Period Filter + Export - Professional Card */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-slate-800 border border-slate-700/50 shadow-lg">
+            <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-amber-500/20 to-transparent" />
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 lg:p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/20 flex items-center justify-center">
+                    <Filter className="w-4 h-4 text-amber-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-extrabold tracking-widest uppercase text-slate-300">Analytics Period</p>
+                    <p className="text-[11px] text-slate-500 font-medium">Filter stock trends & valuation</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-slate-950/60 border border-slate-800/60 overflow-x-auto no-scrollbar">
+                  {(['24h','week','month','annual'] as const).map(p=>(
+                    <button key={p} onClick={()=> setAnalyticsPeriod(p)} className={`px-3.5 lg:px-4 py-1.5 lg:py-2 rounded-xl text-xs lg:text-sm font-bold uppercase tracking-wider whitespace-nowrap transition-all ${analyticsPeriod===p?'bg-gradient-to-r from-amber-500 to-amber-400 text-slate-900 shadow-md shadow-amber-500/20':'bg-transparent text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+                      {p==='24h'?'24 Hours': p.charAt(0).toUpperCase()+p.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="hidden lg:flex items-center gap-2 text-[11px] text-slate-500 bg-slate-800/40 px-3 py-1.5 rounded-full border border-slate-700/30">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Live • {analytics?.summary.totalItems || 0} items
+                </div>
+                <button onClick={handleDownloadPDF} className="px-4 py-2 bg-gradient-to-r from-sky-600 to-sky-500 hover:from-sky-500 hover:to-sky-400 text-white font-bold text-xs lg:text-sm rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 whitespace-nowrap">
+                  <Download className="w-4 h-4"/> <span className="hidden sm:inline">Download</span> PDF
                 </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={handleDownloadPDF} className="px-3 py-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 text-xs font-semibold rounded-xl border border-sky-500/30 flex items-center gap-1.5">
-                <Download className="w-3.5 h-3.5"/> Download PDF
-              </button>
+              </div>
             </div>
           </div>
 
@@ -471,78 +488,127 @@ export const InventoryManager: React.FC = () => {
                 <p className="text-xs text-slate-400 mt-1">Period: {analyticsPeriod.toUpperCase()} &mdash; Generated {new Date().toLocaleString()} &mdash; Grand Horizon Motel</p>
               </div>
 
-              {/* KPI Grid */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow">
-                  <div className="flex items-center justify-between"><span className="text-xs text-slate-400 font-semibold">Every Stock (All-time In)</span><span className="p-2 rounded-xl bg-cyan-500/20 text-cyan-400"><Package className="w-4 h-4"/></span></div>
-                  <p className="text-xl font-bold font-mono text-white mt-2">{analytics.summary.everyStock?.toLocaleString()}</p>
-                  <p className="text-[10px] text-slate-500">Total ever received</p>
+              {/* KPI Grid - Professional */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5">
+                <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg hover:border-slate-700 hover:shadow-xl transition-all">
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-cyan-500/0 via-cyan-500/30 to-cyan-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-slate-400">Every Stock</p>
+                      <p className="text-[10px] text-slate-500 font-medium">All-time In</p>
+                    </div>
+                    <span className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/20 flex items-center justify-center shrink-0 group-hover:bg-cyan-500/20 transition-colors"><Package className="w-5 h-5 text-cyan-400"/></span>
+                  </div>
+                  <p className="text-2xl lg:text-3xl font-black font-mono text-white mt-3 tracking-tight">{analytics.summary.everyStock?.toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-500 mt-1.5 font-medium">Total ever received • All categories</p>
                 </div>
-                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow">
-                  <div className="flex items-center justify-between"><span className="text-xs text-slate-400 font-semibold">Current Stock</span><span className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400"><Boxes className="w-4 h-4"/></span></div>
-                  <p className="text-xl font-bold font-mono text-emerald-400 mt-2">{analytics.summary.totalCurrentQty?.toLocaleString()}</p>
-                  <p className="text-[10px] text-slate-500">{analytics.summary.currentVsEvery}% of every stock &bull; {formatCurrency(analytics.summary.totalValuation)} valuation</p>
+                <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg hover:border-emerald-500/30 hover:shadow-xl transition-all">
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-emerald-500/0 via-emerald-500/30 to-emerald-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-emerald-300/90">Current Stock</p>
+                      <p className="text-[10px] text-slate-500 font-medium">{analytics.summary.currentVsEvery}% of every stock</p>
+                    </div>
+                    <span className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/20 flex items-center justify-center shrink-0 group-hover:bg-emerald-500/20 transition-colors"><Boxes className="w-5 h-5 text-emerald-400"/></span>
+                  </div>
+                  <p className="text-2xl lg:text-3xl font-black font-mono text-emerald-400 mt-3 tracking-tight">{analytics.summary.totalCurrentQty?.toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-400 mt-1.5 font-mono font-semibold">{formatCurrency(analytics.summary.totalValuation)} valuation</p>
                 </div>
-                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow">
-                  <div className="flex items-center justify-between"><span className="text-xs text-slate-400 font-semibold">Stock Out ({analyticsPeriod})</span><span className="p-2 rounded-xl bg-rose-500/20 text-rose-400"><TrendingDown className="w-4 h-4"/></span></div>
-                  <p className="text-xl font-bold font-mono text-rose-400 mt-2">{analytics.summary.periodStockOut?.toLocaleString()}</p>
-                  <p className="text-[10px] text-slate-500">Out vs current: {analytics.summary.stockOutVsCurrent}% &bull; In this period: +{analytics.summary.periodStockIn}</p>
+                <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-slate-900 border border-slate-800 shadow-lg hover:border-rose-500/30 hover:shadow-xl transition-all">
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-rose-500/0 via-rose-500/30 to-rose-500/0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-slate-400">Stock Out</p>
+                      <p className="text-[10px] text-slate-500 font-medium capitalize">{analyticsPeriod} • Out vs current {analytics.summary.stockOutVsCurrent}%</p>
+                    </div>
+                    <span className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/20 flex items-center justify-center shrink-0 group-hover:bg-rose-500/20 transition-colors"><TrendingDown className="w-5 h-5 text-rose-400"/></span>
+                  </div>
+                  <p className="text-2xl lg:text-3xl font-black font-mono text-rose-400 mt-3 tracking-tight">{analytics.summary.periodStockOut?.toLocaleString()}</p>
+                  <p className="text-[11px] text-slate-500 mt-1.5">In period: <span className="font-bold text-emerald-400">+{analytics.summary.periodStockIn?.toLocaleString()}</span></p>
                 </div>
-                <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow">
-                  <div className="flex items-center justify-between"><span className="text-xs text-slate-400 font-semibold">Alerts</span><span className="p-2 rounded-xl bg-amber-500/20 text-amber-400"><AlertTriangle className="w-4 h-4"/></span></div>
-                  <p className="text-xl font-bold font-mono text-amber-400 mt-2">{analytics.summary.lowStockCount} Low &bull; {analytics.summary.outOfStockCount} Out</p>
-                  <p className="text-[10px] text-slate-500">{analytics.summary.totalItems} active items</p>
+                <div className="group relative overflow-hidden p-4 lg:p-5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-slate-900 to-slate-900 border border-amber-500/20 shadow-lg hover:border-amber-500/30 hover:shadow-xl transition-all">
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-amber-500/0 via-amber-500/40 to-amber-500/0" />
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] lg:text-xs font-bold tracking-widest uppercase text-amber-300">Alerts</p>
+                      <p className="text-[10px] text-slate-500 font-medium">{analytics.summary.totalItems} active items</p>
+                    </div>
+                    <span className="w-10 h-10 rounded-xl bg-amber-500 text-slate-900 flex items-center justify-center shrink-0 shadow-md"><AlertTriangle className="w-5 h-5"/></span>
+                  </div>
+                  <p className="text-2xl lg:text-3xl font-black font-mono text-amber-400 mt-3 tracking-tight">{analytics.summary.lowStockCount} <span className="text-[11px] font-bold text-slate-500">Low</span> • {analytics.summary.outOfStockCount} <span className="text-[11px] font-bold text-slate-500">Out</span></p>
+                  <p className="text-[11px] text-amber-300/70 mt-1.5 font-semibold">Requires attention</p>
                 </div>
               </div>
 
-              {/* Label Breakdown */}
+              {/* Charts - Professional */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4"><Activity className="w-4 h-4 text-cyan-400"/> Stock In vs Stock Out Trend ({analyticsPeriod})</h3>
+                <div className="lg:col-span-2 relative overflow-hidden p-6 lg:p-7 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-cyan-500/0 via-cyan-500/20 to-transparent" />
+                  <div className="flex items-start justify-between gap-4 mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-cyan-500/15 border border-cyan-500/20 flex items-center justify-center shrink-0">
+                        <Activity className="w-5 h-5 text-cyan-400"/>
+                      </div>
+                      <div>
+                        <h3 className="text-sm lg:text-[15px] font-bold text-white tracking-tight">Stock In vs Stock Out Trend</h3>
+                        <p className="text-[11px] text-slate-500 font-medium capitalize">{analyticsPeriod} • Daily net movement • Live</p>
+                      </div>
+                    </div>
+                    <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1 rounded-full">Trend</span>
+                  </div>
                   {analytics.trend?.length ? (
-                    <ResponsiveContainer width="100%" height={280}>
+                    <ResponsiveContainer width="100%" height={290}>
                       <AreaChart data={analytics.trend}>
                         <defs>
-                          <linearGradient id="gIn" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#34d399" stopOpacity={0.3}/><stop offset="95%" stopColor="#34d399" stopOpacity={0}/></linearGradient>
-                          <linearGradient id="gOut" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f87171" stopOpacity={0.3}/><stop offset="95%" stopColor="#f87171" stopOpacity={0}/></linearGradient>
+                          <linearGradient id="gIn" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#34d399" stopOpacity={0.35}/><stop offset="95%" stopColor="#34d399" stopOpacity={0}/></linearGradient>
+                          <linearGradient id="gOut" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#f87171" stopOpacity={0.35}/><stop offset="95%" stopColor="#f87171" stopOpacity={0}/></linearGradient>
                         </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155"/>
-                        <XAxis dataKey="day" tick={{fontSize:10, fill:'#94a3b8'}}/>
-                        <YAxis tick={{fontSize:10, fill:'#94a3b8'}}/>
-                        <Tooltip contentStyle={{background:'#1e293b', border:'1px solid #334155', borderRadius:12}}/>
-                        <Legend wrapperStyle={{fontSize:11}}/>
-                        <Area type="monotone" dataKey="stockIn" name="Stock In" stroke="#34d399" fill="url(#gIn)" strokeWidth={2}/>
-                        <Area type="monotone" dataKey="stockOut" name="Stock Out" stroke="#f87171" fill="url(#gOut)" strokeWidth={2}/>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false}/>
+                        <XAxis dataKey="day" tick={{fontSize:11, fill:'#94a3b8', fontWeight:600}} axisLine={{stroke:'#334155'}} tickLine={false}/>
+                        <YAxis tick={{fontSize:11, fill:'#94a3b8', fontWeight:600}} axisLine={false} tickLine={false}/>
+                        <Tooltip contentStyle={{background:'#0f172a', border:'1px solid #334155', borderRadius:12, boxShadow:'0 10px 25px rgba(0,0,0,0.3)'}} labelStyle={{color:'#94a3b8', fontSize:11, fontWeight:700}} itemStyle={{fontSize:12, fontWeight:700}}/>
+                        <Legend wrapperStyle={{fontSize:12, fontWeight:700, paddingTop:12}} iconType="circle"/>
+                        <Area type="monotone" dataKey="stockIn" name="Stock In" stroke="#34d399" fill="url(#gIn)" strokeWidth={2.5} dot={false} activeDot={{r:5, strokeWidth:2, stroke:'#0f172a'}}/>
+                        <Area type="monotone" dataKey="stockOut" name="Stock Out" stroke="#f87171" fill="url(#gOut)" strokeWidth={2.5} dot={false} activeDot={{r:5, strokeWidth:2, stroke:'#0f172a'}}/>
                       </AreaChart>
                     </ResponsiveContainer>
-                  ) : <div className="h-[280px] flex items-center justify-center text-slate-500 text-xs">No transactions in period</div>}
-                  <div className="mt-4 p-3 rounded-xl bg-slate-800/50 border border-slate-700 flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Current stock represents <strong className="text-emerald-400">{analytics.summary.currentVsEvery}%</strong> of every stock ever received.</span>
-                    <span className="text-slate-400">Period net: <strong className={analytics.summary.periodStockIn - analytics.summary.periodStockOut >=0 ? 'text-emerald-400':'text-rose-400'}>{analytics.summary.periodStockIn - analytics.summary.periodStockOut >0 ? '+' : ''}{analytics.summary.periodStockIn - analytics.summary.periodStockOut}</strong></span>
+                  ) : <div className="h-[290px] flex flex-col items-center justify-center text-slate-500 bg-slate-800/20 rounded-xl border border-dashed border-slate-700/50"><Activity className="w-8 h-8 text-slate-600 mb-2"/><p className="text-xs font-semibold">No transactions in period</p><p className="text-[11px] text-slate-500">Try a different period</p></div>}
+                  <div className="mt-5 p-3 lg:p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs lg:text-sm">
+                    <span className="text-slate-400 font-medium">Current stock <strong className="text-emerald-400 font-black">{analytics.summary.currentVsEvery}%</strong> of every stock</span>
+                    <span className="text-slate-400 font-medium">Period net <strong className={analytics.summary.periodStockIn - analytics.summary.periodStockOut >=0 ? 'text-emerald-400 font-black':'text-rose-400 font-black'}>{analytics.summary.periodStockIn - analytics.summary.periodStockOut >0 ? '+' : ''}{analytics.summary.periodStockIn - analytics.summary.periodStockOut}</strong> units</span>
                   </div>
                 </div>
-                <div className="p-6 rounded-2xl bg-slate-900/90 border border-slate-800 shadow">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4"><Layers className="w-4 h-4 text-purple-400"/> Stock by Label</h3>
+                <div className="relative overflow-hidden p-6 lg:p-7 rounded-2xl bg-slate-900 border border-slate-800 shadow-xl">
+                  <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-purple-500/0 via-purple-500/20 to-transparent" />
+                  <div className="flex items-center gap-3 mb-5">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/20 flex items-center justify-center shrink-0">
+                      <Layers className="w-5 h-5 text-purple-400"/>
+                    </div>
+                    <div>
+                      <h3 className="text-sm lg:text-[15px] font-bold text-white tracking-tight">Stock by Label</h3>
+                      <p className="text-[11px] text-slate-500 font-medium">Distribution • Current qty</p>
+                    </div>
+                  </div>
                   {analytics.labelBreakdown ? (
                     <>
-                      <ResponsiveContainer width="100%" height={200}>
+                      <ResponsiveContainer width="100%" height={210}>
                         <PieChart>
-                          <Pie data={Object.entries(analytics.labelBreakdown).map(([k,v]:any)=>({name:k, value:v.currentQty}))} cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={3} dataKey="value" nameKey="name">
+                          <Pie data={Object.entries(analytics.labelBreakdown).map(([k,v]:any)=>({name:k, value:v.currentQty}))} cx="50%" cy="50%" innerRadius={52} outerRadius={78} paddingAngle={3} dataKey="value" nameKey="name" stroke="none">
                             {Object.keys(analytics.labelBreakdown).map((k,i)=> <Cell key={k} fill={LABEL_COLORS[k]||'#94a3b8'}/>)}
                           </Pie>
-                          <Tooltip formatter={(v:number)=> v.toLocaleString()}/>
+                          <Tooltip contentStyle={{background:'#0f172a', border:'1px solid #334155', borderRadius:10}} formatter={(v:number)=> v.toLocaleString()}/>
                         </PieChart>
                       </ResponsiveContainer>
-                      <div className="space-y-2 mt-2">
+                      <div className="space-y-2.5 mt-4">
                         {Object.entries(analytics.labelBreakdown).map(([label, v]:any)=>(
-                          <div key={label} className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{background: LABEL_COLORS[label]}}/><span className="text-slate-300 font-semibold">{label}</span><span className="text-slate-500">({v.count} items)</span></div>
-                            <span className="font-mono font-bold text-white">{v.currentQty.toLocaleString()} &bull; {formatCurrency(v.valuation)}</span>
+                          <div key={label} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/40 border border-slate-800/60 hover:bg-slate-800/60 transition-colors">
+                            <div className="flex items-center gap-2.5"><div className="w-3 h-3 rounded-full shadow-sm" style={{background: LABEL_COLORS[label], boxShadow:`0 0 8px ${LABEL_COLORS[label]}60`}}/><span className="text-[13px] font-bold text-white tracking-tight">{label}</span><span className="text-[11px] font-semibold text-slate-500 bg-slate-700/40 px-1.5 py-0.5 rounded-full">{v.count}</span></div>
+                            <span className="text-[12px] font-black font-mono text-white">{v.currentQty.toLocaleString()} <span className="text-[10px] font-bold text-slate-400">• {formatCurrency(v.valuation)}</span></span>
                           </div>
                         ))}
                       </div>
                     </>
-                  ) : <div className="h-[280px] flex items-center justify-center text-slate-500 text-xs">No data</div>}
+                  ) : <div className="h-[290px] flex flex-col items-center justify-center text-slate-500 bg-slate-800/20 rounded-xl border border-dashed border-slate-700/50"><Layers className="w-8 h-8 text-slate-600 mb-2"/><p className="text-xs font-semibold">No data</p></div>}
                 </div>
               </div>
 
