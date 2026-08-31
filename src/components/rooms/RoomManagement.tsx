@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { Room, Guest, RoomType } from '../../types';
 import { formatCurrency, CURRENCY_SYMBOL } from '../../utils/currency';
-import { daysFromTodayCAT } from '../../utils/dates';
+import { daysFromTodayCAT, todayCAT } from '../../utils/dates';
 import {
   BedDouble,
   Search,
@@ -21,12 +22,16 @@ import {
   Phone,
   RefreshCw,
   Clock,
-  Receipt
+  Receipt,
+  Edit3
 } from 'lucide-react';
 
 const ROOM_SERVICE_ESTIMATE = 0; // Deprecated: now calculated from real orders
 
 export const RoomManagement: React.FC = () => {
+  const { user } = useAuth();
+  // PUT /api/rooms/:id is admin+manager; match it so the button never 403s.
+  const canEditRooms = user?.role === 'admin' || user?.role === 'manager';
   const { success, error, info } = useToast();  const [loading, setLoading] = useState(true);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
@@ -47,6 +52,9 @@ export const RoomManagement: React.FC = () => {
     payment_method: 'Cash',
     notes: '',
   });
+  // Filters the existing-guest picker. Scrolling a full guest list to assign a
+  // room is the slow part of check-in, so the admin can type instead.
+  const [guestSearch, setGuestSearch] = useState('');
 
   // Check-Out Modal State
   const [showCheckOutModal, setShowCheckOutModal] = useState(false);
@@ -57,6 +65,7 @@ export const RoomManagement: React.FC = () => {
 
   // Add Room / Add Room Type Modal State
   const [showRoomModal, setShowRoomModal] = useState(false);
+  const [editingRoom, setEditingRoom] = useState<Room | null>(null);
   const [showRoomTypeModal, setShowRoomTypeModal] = useState(false);
   const [roomForm, setRoomForm] = useState({
     room_number: '',
@@ -92,10 +101,22 @@ export const RoomManagement: React.FC = () => {
     fetchRoomsData();
   }, []);
 
+  // Nights between today and the chosen check-out date (minimum 1).
+  const nightsUntil = (dateStr: string): number => {
+    if (!dateStr) return 1;
+    const out = new Date(`${dateStr}T00:00:00`);
+    const today = new Date(`${todayCAT()}T00:00:00`);
+    if (Number.isNaN(out.getTime())) return 1;
+    return Math.max(1, Math.round((out.getTime() - today.getTime()) / 86400000));
+  };
+
   const handleOpenCheckIn = (room: Room) => {
     setSelectedRoomForCheckIn(room);
+    setGuestSearch('');
     setCheckInForm({
-      guest_id: guests[0]?.id || '',
+      // Deliberately blank: pre-selecting the first guest made it easy to
+      // assign a room to the wrong person with a single click.
+      guest_id: '',
       guest_name: '',
       guest_phone: '',
       expected_check_out_date: daysFromTodayCAT(2),
@@ -104,6 +125,11 @@ export const RoomManagement: React.FC = () => {
       notes: '',
     });
     setShowCheckInModal(true);
+  };
+
+  // Quick stay presets — set the check-out date N nights from today.
+  const setStayNights = (nights: number) => {
+    setCheckInForm((f) => ({ ...f, expected_check_out_date: daysFromTodayCAT(nights) }));
   };
 
   const handleOpenCheckOut = async (room: Room) => {
@@ -124,12 +150,25 @@ export const RoomManagement: React.FC = () => {
   };
 
   const handleOpenAddRoom = () => {
+    setEditingRoom(null);
     setRoomForm({
       room_number: '',
       floor: '1',
       room_type_id: roomTypes[0]?.id || '',
       price_per_night: '',
       notes: '',
+    });
+    setShowRoomModal(true);
+  };
+
+  const handleOpenEditRoom = (room: Room) => {
+    setEditingRoom(room);
+    setRoomForm({
+      room_number: room.room_number || '',
+      floor: String(room.floor ?? '1'),
+      room_type_id: room.room_type_id || roomTypes[0]?.id || '',
+      price_per_night: String(room.price_per_night ?? ''),
+      notes: (room as any).notes || '',
     });
     setShowRoomModal(true);
   };
@@ -141,19 +180,26 @@ export const RoomManagement: React.FC = () => {
     }
 
     setSubmitting(true);
+    const payload = {
+      room_number: roomForm.room_number.trim(),
+      floor: parseInt(roomForm.floor, 10),
+      room_type_id: roomForm.room_type_id,
+      price_per_night: parseFloat(roomForm.price_per_night),
+      notes: roomForm.notes || null,
+    };
     try {
-      await api.createRoom({
-        room_number: roomForm.room_number.trim(),
-        floor: parseInt(roomForm.floor, 10),
-        room_type_id: roomForm.room_type_id,
-        price_per_night: parseFloat(roomForm.price_per_night),
-        notes: roomForm.notes || null,
-      });
-      success('Room Added', `Room ${roomForm.room_number} registered successfully`);
+      if (editingRoom) {
+        await api.updateRoom(editingRoom.id, payload);
+        success('Room Updated', `Room ${payload.room_number} saved successfully`);
+      } else {
+        await api.createRoom(payload);
+        success('Room Added', `Room ${payload.room_number} registered successfully`);
+      }
       setShowRoomModal(false);
+      setEditingRoom(null);
       fetchRoomsData();
     } catch (err: any) {
-      error('Failed to add room', err.message);
+      error(editingRoom ? 'Failed to update room' : 'Failed to add room', err.message);
     } finally {
       setSubmitting(false);
     }
@@ -461,6 +507,16 @@ export const RoomManagement: React.FC = () => {
                   </button>
                 )}
 
+                {canEditRooms && (
+                  <button
+                    onClick={() => handleOpenEditRoom(room)}
+                    className="w-full py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl border border-slate-700 transition-colors flex items-center justify-center gap-1.5"
+                    title="Edit room number, floor, category, rate or notes"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Edit Room
+                  </button>
+                )}
+
                 {isOccupied && (
                   <button
                     onClick={() => handleOpenCheckOut(room)}
@@ -517,19 +573,47 @@ export const RoomManagement: React.FC = () => {
 
             <form onSubmit={handleConfirmCheckIn} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Select Existing Guest</label>
-                <select
-                  value={checkInForm.guest_id}
-                  onChange={(e) => setCheckInForm({ ...checkInForm, guest_id: e.target.value })}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
-                >
-                  <option value="">-- Or register new guest below --</option>
-                  {guests.map((g) => (
-                    <option key={g.id} value={g.id}>
-                      {g.full_name} ({g.phone}) - {g.guest_code}
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Assign To Guest</label>
+                <div className="relative mb-2">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                  <input
+                    type="text"
+                    value={guestSearch}
+                    onChange={(e) => setGuestSearch(e.target.value)}
+                    placeholder="Search guest by name, phone or code..."
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder:text-slate-500"
+                  />
+                </div>
+                {(() => {
+                  const q = guestSearch.trim().toLowerCase();
+                  const matches = q
+                    ? guests.filter((g) =>
+                        `${g.full_name || ''} ${g.phone || ''} ${g.guest_code || ''}`.toLowerCase().includes(q)
+                      )
+                    : guests;
+                  return (
+                    <>
+                      <select
+                        value={checkInForm.guest_id}
+                        onChange={(e) => setCheckInForm({ ...checkInForm, guest_id: e.target.value })}
+                        size={Math.min(5, Math.max(2, matches.length + 1))}
+                        className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                      >
+                        <option value="">-- Register a new guest below --</option>
+                        {matches.map((g) => (
+                          <option key={g.id} value={g.id}>
+                            {g.full_name} ({g.phone}) - {g.guest_code}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        {q
+                          ? `${matches.length} of ${guests.length} guests match "${guestSearch.trim()}"`
+                          : `${guests.length} registered guests`}
+                      </p>
+                    </>
+                  );
+                })()}
               </div>
 
               {!checkInForm.guest_id && (
@@ -559,11 +643,36 @@ export const RoomManagement: React.FC = () => {
                 </div>
               )}
 
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Length Of Stay</label>
+                <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                  {[1, 2, 3, 7].map((nights) => {
+                    const active = nightsUntil(checkInForm.expected_check_out_date) === nights;
+                    return (
+                      <button
+                        key={nights}
+                        type="button"
+                        onClick={() => setStayNights(nights)}
+                        className={`px-3 py-1.5 rounded-xl text-[11px] font-bold transition-colors ${
+                          active
+                            ? 'bg-emerald-500 text-slate-950'
+                            : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700'
+                        }`}
+                      >
+                        {nights} night{nights > 1 ? 's' : ''}
+                      </button>
+                    );
+                  })}
+                  <span className="text-[10px] text-slate-500 ml-1">or pick a date</span>
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">Expected Check-Out</label>
                   <input
                     type="date"
+                    min={daysFromTodayCAT(1)}
                     value={checkInForm.expected_check_out_date}
                     onChange={(e) => setCheckInForm({ ...checkInForm, expected_check_out_date: e.target.value })}
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
@@ -581,8 +690,63 @@ export const RoomManagement: React.FC = () => {
                     className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
                     required
                   />
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCheckInForm((f) => ({ ...f, deposit_paid: String(selectedRoomForCheckIn.price_per_night) }))}
+                      className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
+                    >
+                      1 night
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCheckInForm((f) => ({
+                        ...f,
+                        deposit_paid: String(Number(selectedRoomForCheckIn.price_per_night) * nightsUntil(f.expected_check_out_date)),
+                      }))}
+                      className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
+                    >
+                      Full stay
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCheckInForm((f) => ({ ...f, deposit_paid: '0' }))}
+                      className="px-2 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
+                    >
+                      None
+                    </button>
+                  </div>
                 </div>
               </div>
+
+              {/* Live stay summary so the admin sees the cost before assigning. */}
+              {(() => {
+                const nights = nightsUntil(checkInForm.expected_check_out_date);
+                const rate = Number(selectedRoomForCheckIn.price_per_night) || 0;
+                const total = rate * nights;
+                const deposit = parseFloat(checkInForm.deposit_paid || '0') || 0;
+                const balance = total - deposit;
+                return (
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400 font-medium">
+                        {nights} night{nights > 1 ? 's' : ''} &times; {formatCurrency(rate)}
+                      </span>
+                      <span className="font-mono font-bold text-white">{formatCurrency(total)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400 font-medium">Deposit paid now</span>
+                      <span className="font-mono font-bold text-emerald-400">-{formatCurrency(deposit)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-800">
+                      <span className="font-bold text-slate-300">Balance at check-out</span>
+                      <span className={`font-mono font-black ${balance > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                        {formatCurrency(Math.max(0, balance))}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">Payment Method</label>
@@ -793,11 +957,13 @@ export const RoomManagement: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl animate-in fade-in zoom-in duration-150 max-h-[90vh] overflow-y-auto">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Plus className="w-5 h-5 text-blue-400" />
-              Add New Room
+              {editingRoom ? <Edit3 className="w-5 h-5 text-amber-400" /> : <Plus className="w-5 h-5 text-blue-400" />}
+              {editingRoom ? `Edit Room ${editingRoom.room_number}` : 'Add New Room'}
             </h3>
             <p className="text-xs text-slate-400 mt-1">
-              Register a physical room under an existing category.
+              {editingRoom
+                ? 'Update the room number, floor, category, rate or notes.'
+                : 'Register a physical room under an existing category.'}
             </p>
 
             <form onSubmit={handleCreateRoom} className="mt-4 space-y-4">
@@ -869,7 +1035,7 @@ export const RoomManagement: React.FC = () => {
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setShowRoomModal(false)}
+                  onClick={() => { setShowRoomModal(false); setEditingRoom(null); }}
                   className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
                 >
                   Cancel
@@ -879,7 +1045,9 @@ export const RoomManagement: React.FC = () => {
                   disabled={submitting}
                   className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow-lg transition-transform active:scale-95 disabled:opacity-50"
                 >
-                  {submitting ? 'Adding...' : 'Add Room'}
+                  {submitting
+                    ? (editingRoom ? 'Saving...' : 'Adding...')
+                    : (editingRoom ? 'Save Changes' : 'Add Room')}
                 </button>
               </div>
             </form>
