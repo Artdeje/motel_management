@@ -111,6 +111,7 @@ export const api = {
 
   // Inventory
   getInventoryItems: () => request('/api/inventory/items'),
+  getInventoryAnalytics: (period: string = 'month') => request(`/api/inventory/analytics?period=${period}`),
   createInventoryItem: (item: any) => request('/api/inventory/items', { method: 'POST', body: JSON.stringify(item) }),
   updateInventoryItem: (id: string, item: any) => request(`/api/inventory/items/${id}`, { method: 'PUT', body: JSON.stringify(item) }),
   deleteInventoryItem: (id: string) => request(`/api/inventory/items/${id}`, { method: 'DELETE' }),

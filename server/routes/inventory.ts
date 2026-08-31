@@ -4,6 +4,128 @@ import { authMiddleware, logAudit, requireRoles, createNotification } from '../m
 
 export const inventoryRouter = Router();
 
+// Helper: canonical stock labels - Drinks, Foods, Ingredients, Tools
+function getStockLabel(categoryName: string, department?: string): string {
+  const n = (categoryName || '').toLowerCase();
+  const d = (department || '').toLowerCase();
+  if (n.includes('drink') || n.includes('bar') || n.includes('beverage') || d === 'bar') return 'Drinks';
+  if (n.includes('linen') || n.includes('clean') || n.includes('tool') || n.includes('other') || n.includes('maintenance') || d === 'housekeeping') return 'Tools';
+  if (n.includes('ingredient') || n.includes('spice') || n.includes('oil') || n.includes('produce')) return 'Ingredients';
+  return 'Foods';
+}
+
+async function ensureStockLabels() {
+  const labels = [
+    { id: 'cat-drinks', name: 'Drinks', description: 'Beverages, juices, water, beer, wine, spirits' },
+    { id: 'cat-foods', name: 'Foods', description: 'Prepared foods, snacks, staples, dairy, meats' },
+    { id: 'cat-ingredients', name: 'Ingredients', description: 'Raw ingredients, spices, oils, produce, grains' },
+    { id: 'cat-tools', name: 'Tools', description: 'Cleaning supplies, linen, tools, amenities, maintenance spares' },
+  ];
+  for (const c of labels) {
+    const exists = await dbGet<any>('SELECT id FROM inventory_categories WHERE id = ? OR name = ?', [c.id, c.name]);
+    if (!exists) {
+      try { await dbRun('INSERT INTO inventory_categories (id, name, description) VALUES (?, ?, ?)', [c.id, c.name, c.description]); } catch {}
+    }
+  }
+}
+
+// GET /api/inventory/analytics - Live stock analytics with period filter (24h/week/month/annual)
+inventoryRouter.get('/inventory/analytics', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    await ensureStockLabels();
+    const period = (req.query.period as string) || 'month';
+    const periodMap: Record<string, string> = {
+      '24h': '1 DAY',
+      '24 hours': '1 DAY',
+      'daily': '1 DAY',
+      'week': '7 DAY',
+      'weekly': '7 DAY',
+      'month': '30 DAY',
+      'monthly': '30 DAY',
+      'annual': '365 DAY',
+      'year': '365 DAY',
+      'yearly': '365 DAY',
+    };
+    const interval = periodMap[period.toLowerCase()] || periodMap[period] || '30 DAY';
+
+    // Current stock aggregates
+    const allItems = await dbAll<any>(`SELECT i.*, ic.name as category_name FROM inventory_items i JOIN inventory_categories ic ON i.category_id = ic.id WHERE i.is_active = 1`);
+    let totalCurrentQty = 0, totalValuation = 0, totalItems = allItems.length;
+    let lowStockCount = 0, outOfStockCount = 0;
+    const labelBreakdown: Record<string, { count: number; currentQty: number; valuation: number }> = {
+      Drinks: { count: 0, currentQty: 0, valuation: 0 },
+      Foods: { count: 0, currentQty: 0, valuation: 0 },
+      Ingredients: { count: 0, currentQty: 0, valuation: 0 },
+      Tools: { count: 0, currentQty: 0, valuation: 0 },
+    };
+    for (const it of allItems) {
+      const avail = (it.current_quantity - (it.reserved_quantity || 0));
+      totalCurrentQty += it.current_quantity;
+      totalValuation += it.current_quantity * (it.unit_cost || 0);
+      if (avail <= 0) outOfStockCount++;
+      else if (avail <= it.minimum_quantity) lowStockCount++;
+      const label = getStockLabel(it.category_name, it.department);
+      if (!labelBreakdown[label]) labelBreakdown[label] = { count: 0, currentQty: 0, valuation: 0 };
+      labelBreakdown[label].count++;
+      labelBreakdown[label].currentQty += it.current_quantity;
+      labelBreakdown[label].valuation += it.current_quantity * (it.unit_cost || 0);
+    }
+
+    // Every stock (total ever received) vs current stock via transactions
+    const everyStockRow = await dbGet<any>(`SELECT COALESCE(SUM(quantity),0) as total FROM inventory_transactions WHERE transaction_type IN ('Received','Returned')`);
+    const stockOutRow = await dbGet<any>(`SELECT COALESCE(SUM(quantity),0) as total FROM inventory_transactions WHERE transaction_type IN ('Issued','Consumed','Damaged','Lost','Expired')`);
+    const everyStock = everyStockRow?.total || 0;
+    const totalStockOut = stockOutRow?.total || 0;
+
+    // Period filtered transactions for trend
+    const periodStockIn = await dbGet<any>(`SELECT COALESCE(SUM(quantity),0) as total FROM inventory_transactions WHERE transaction_type IN ('Received','Returned') AND created_at >= DATE_SUB(NOW(), INTERVAL ${interval})`);
+    const periodStockOut = await dbGet<any>(`SELECT COALESCE(SUM(quantity),0) as total FROM inventory_transactions WHERE transaction_type IN ('Issued','Consumed','Damaged','Lost','Expired') AND created_at >= DATE_SUB(NOW(), INTERVAL ${interval})`);
+    const periodTransactions = await dbAll<any>(`SELECT DATE_FORMAT(created_at, '%Y-%m-%d') as day, transaction_type, SUM(quantity) as qty FROM inventory_transactions WHERE created_at >= DATE_SUB(NOW(), INTERVAL ${interval}) GROUP BY day, transaction_type ORDER BY day ASC`);
+
+    // Build daily trend map
+    const trendMap = new Map<string, { day: string; stockIn: number; stockOut: number }>();
+    for (const r of periodTransactions) {
+      const day = r.day;
+      if (!trendMap.has(day)) trendMap.set(day, { day, stockIn: 0, stockOut: 0 });
+      const entry = trendMap.get(day)!;
+      if (['Received','Returned'].includes(r.transaction_type)) entry.stockIn += Number(r.qty);
+      else entry.stockOut += Number(r.qty);
+    }
+    const trend = Array.from(trendMap.values()).sort((a,b)=> a.day.localeCompare(b.day));
+
+    // Stock status distribution for current
+    const statusDist = await dbAll<any>(`SELECT 
+      SUM(CASE WHEN (i.current_quantity - COALESCE(i.reserved_quantity,0)) <= 0 THEN 1 ELSE 0 END) as outOfStock,
+      SUM(CASE WHEN (i.current_quantity - COALESCE(i.reserved_quantity,0)) > 0 AND (i.current_quantity - COALESCE(i.reserved_quantity,0)) <= i.minimum_quantity THEN 1 ELSE 0 END) as lowStock,
+      SUM(CASE WHEN (i.current_quantity - COALESCE(i.reserved_quantity,0)) > i.minimum_quantity THEN 1 ELSE 0 END) as inStock
+      FROM inventory_items i WHERE i.is_active=1`);
+
+    return res.json({
+      period, interval,
+      summary: {
+        totalItems,
+        totalCurrentQty,
+        totalValuation,
+        everyStock,
+        totalStockOut,
+        currentVsEvery: everyStock > 0 ? Number(((totalCurrentQty / everyStock)*100).toFixed(1)) : 0,
+        stockOutVsCurrent: totalCurrentQty > 0 ? Number(((totalStockOut / (totalStockOut + totalCurrentQty))*100).toFixed(1)) : 0,
+        lowStockCount,
+        outOfStockCount,
+        periodStockIn: periodStockIn?.total || 0,
+        periodStockOut: periodStockOut?.total || 0,
+      },
+      labelBreakdown,
+      trend,
+      statusDist: statusDist[0] || { outOfStock: 0, lowStock: 0, inStock: 0 },
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (err:any) {
+    console.error('Inventory analytics error:', err);
+    return res.status(500).json({ error: 'Failed to load inventory analytics' });
+  }
+});
+
 // GET /api/inventory/items - List all items with category, stock status & alerts
 inventoryRouter.get('/inventory/items', authMiddleware, async (req: Request, res: Response) => {
   const role = req.user?.role;
@@ -32,6 +154,9 @@ inventoryRouter.get('/inventory/items', authMiddleware, async (req: Request, res
     deptParams
   );
 
+  // Ensure stock labels exist for frontend filters
+  await ensureStockLabels();
+
   const enriched = items.map((item) => {
     const available = item.current_quantity - (item.reserved_quantity || 0);
     let stock_status = 'In Stock';
@@ -43,10 +168,12 @@ inventoryRouter.get('/inventory/items', authMiddleware, async (req: Request, res
       stock_status = 'Low Stock';
     }
     const recommended_reorder = Math.max(0, item.reorder_quantity + (item.minimum_quantity - available));
+    const stock_label = getStockLabel(item.category_name, item.department);
     return {
       ...item,
       available_quantity: available,
       stock_status,
+      stock_label,
       recommended_reorder: Math.ceil(recommended_reorder),
     };
   });

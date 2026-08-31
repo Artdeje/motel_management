@@ -126,8 +126,12 @@ export async function seedDatabaseIfEmpty(): Promise<void> {
       ]);
     }
 
-    // 7. Inventory Categories
+    // 7. Inventory Categories - Canonical live stock labels: Drinks, Foods, Ingredients, Tools + legacy
     const invCategories = [
+      { id: 'cat-drinks', name: 'Drinks', description: 'Beverages, juices, water, beer, wine, spirits (Stock Label: Drinks)' },
+      { id: 'cat-foods', name: 'Foods', description: 'Prepared foods, snacks, staples, dairy, meats (Stock Label: Foods)' },
+      { id: 'cat-ingredients', name: 'Ingredients', description: 'Raw ingredients, spices, oils, produce, grains (Stock Label: Ingredients)' },
+      { id: 'cat-tools', name: 'Tools', description: 'Cleaning supplies, linen, tools, amenities, maintenance spares (Stock Label: Tools)' },
       { id: 'cat-clean', name: 'Cleaning Supplies', description: 'Detergents, disinfectants, mops, sanitizers, amenities' },
       { id: 'cat-linen', name: 'Linen', description: 'Bed sheets, duvet covers, pillowcases, bath towels, bathrobes' },
       { id: 'cat-kitchen', name: 'Kitchen Ingredients', description: 'Fresh meats, poultry, dairy, produce, grains, spices, oils' },

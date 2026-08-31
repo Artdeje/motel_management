@@ -5,6 +5,8 @@ import { authMiddleware, logAudit, requireRoles, createNotification } from '../m
 export const menuRouter = Router();
 
 // GET /api/menu/items - List menu items with live ingredient stock & computed available servings
+// Menu is INDEPENDENT from inventory: items can exist without any linked stock.
+// When ingredients are linked, live stock is pulled from inventory (LEFT JOIN so orphaned stock doesn't break menu).
 menuRouter.get('/menu/items', authMiddleware, async (req: Request, res: Response) => {
   const items = await dbAll<any>(
     `SELECT m.*, mc.name as category_name, mc.icon as category_icon,
@@ -21,7 +23,7 @@ menuRouter.get('/menu/items', authMiddleware, async (req: Request, res: Response
               i.current_quantity, i.reserved_quantity,
               (i.current_quantity - i.reserved_quantity) as available_stock
        FROM menu_item_ingredients mii
-       JOIN inventory_items i ON mii.inventory_item_id = i.id
+       LEFT JOIN inventory_items i ON mii.inventory_item_id = i.id
        WHERE mii.menu_item_id = ?`,
       [item.id]
     );
@@ -138,13 +140,17 @@ menuRouter.post('/menu/items', authMiddleware, requireRoles(['admin', 'manager',
       [id, name, category_id, description || null, parseFloat(price), parseInt(preparation_duration || 15, 10)]
     );
 
+    // Ingredients are OPTIONAL – menu is independent. Only link those that reference existing inventory.
     if (ingredients && Array.isArray(ingredients)) {
       for (const ing of ingredients) {
+        if (!ing.inventory_item_id) continue;
+        const invExists = await dbGet<any>('SELECT id FROM inventory_items WHERE id = ?', [ing.inventory_item_id]);
+        if (!invExists) continue; // skip orphaned reference, keep menu independent
         const miiId = `rec-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
         await dbRun(
           `INSERT INTO menu_item_ingredients (id, menu_item_id, inventory_item_id, quantity_required, unit)
            VALUES (?, ?, ?, ?, ?)`,
-          [miiId, id, ing.inventory_item_id, parseFloat(ing.quantity_required), ing.unit || 'units']
+          [miiId, id, ing.inventory_item_id, parseFloat(ing.quantity_required || 1), ing.unit || 'units']
         );
       }
     }
@@ -176,14 +182,18 @@ menuRouter.put('/menu/items/:id', authMiddleware, requireRoles(['admin', 'manage
       [name, category_id, description || null, parseFloat(price), parseInt(preparation_duration || 15, 10), is_active ? 1 : 0, req.params.id]
     );
 
+    // Ingredients are optional – preserve menu independence. Only update if array is provided.
     if (ingredients && Array.isArray(ingredients)) {
       await dbRun('DELETE FROM menu_item_ingredients WHERE menu_item_id = ?', [req.params.id]);
       for (const ing of ingredients) {
+        if (!ing.inventory_item_id) continue;
+        const invExists = await dbGet<any>('SELECT id FROM inventory_items WHERE id = ?', [ing.inventory_item_id]);
+        if (!invExists) continue;
         const miiId = `rec-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
         await dbRun(
           `INSERT INTO menu_item_ingredients (id, menu_item_id, inventory_item_id, quantity_required, unit)
            VALUES (?, ?, ?, ?, ?)`,
-          [miiId, req.params.id, ing.inventory_item_id, parseFloat(ing.quantity_required), ing.unit || 'units']
+          [miiId, req.params.id, ing.inventory_item_id, parseFloat(ing.quantity_required || 1), ing.unit || 'units']
         );
       }
     }

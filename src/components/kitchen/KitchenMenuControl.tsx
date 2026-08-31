@@ -623,7 +623,7 @@ export const KitchenMenuControl: React.FC = () => {
                         <option value="">Select stock item...</option>
                         {inventoryItems.map((inv) => (
                           <option key={inv.id} value={inv.id}>
-                            {inv.name} (Stock: {inv.available_quantity ?? inv.current_quantity ?? 0})
+                            {inv.name} [{inv.stock_label || 'Foods'}] (Stock: {inv.available_quantity ?? inv.current_quantity ?? 0} {inv.unit})
                           </option>
                         ))}
                       </select>
