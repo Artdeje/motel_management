@@ -46,8 +46,8 @@ export const ReportsView: React.FC = () => {
       setLoading(true);
       const [summary, trend, overview] = await Promise.all([
         api.getReportData({ timeframe }),
-        api.getFinanceTrend(12),
-        api.getFinanceOverview()
+        api.getFinanceTrend(timeframe),
+        api.getFinanceOverview(timeframe)
       ]);
       setReportData(summary);
       setFinanceTrend(trend);

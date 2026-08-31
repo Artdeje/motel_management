@@ -85,6 +85,12 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
     try {
       const res = await api.login({ username, password });
+      // Direct login mode (OTP disabled on backend) — backend now returns token immediately
+      if (res.token) {
+        setStoredToken(res.token);
+        window.location.reload();
+        return;
+      }
       if (res.requiresOtp) {
         setUserId(res.userId);
         setMaskedEmail(res.email);
