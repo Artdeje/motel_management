@@ -21,10 +21,12 @@ import {
   Settings,
   ChevronsLeft,
   ChevronsRight,
+  HandCoins,
 } from 'lucide-react';
 
 export type NavView =
   | 'dashboard'
+  | 'debtors'
   | 'bartender-dashboard'
   | 'rooms'
   | 'reservations'
@@ -61,6 +63,7 @@ const NAV_ITEMS: NavItem[] = [
   // Food & Beverage / POS
   { id: 'pos', label: 'Bartender POS', icon: ConciergeBell, roles: ['admin', 'bartender', 'manager'] },
   { id: 'orders', label: 'Orders Queue', icon: Receipt, roles: ['admin', 'manager', 'bartender'] },
+  { id: 'debtors', label: 'Debtors', icon: HandCoins, roles: ['admin', 'manager', 'bartender'] },
   { id: 'kitchen-orders', label: 'Kitchen Orders', icon: ChefHat, roles: ['admin', 'manager', 'chef'] },
   { id: 'menu', label: 'Menu & Recipes', icon: UtensilsCrossed, roles: ['admin', 'manager', 'chef'] },
 

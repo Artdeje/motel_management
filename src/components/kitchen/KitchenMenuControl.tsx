@@ -17,9 +17,10 @@ import {
   Trash2,
   Lock,
   Layers,
-  UtensilsCrossed
+  UtensilsCrossed,
+  Download,
 } from 'lucide-react';
-import { formatCurrency } from '../../utils/currency';
+import { formatCurrency, CURRENCY_SYMBOL } from '../../utils/currency';
 
 export const KitchenMenuControl: React.FC = () => {
   const { user } = useAuth();
@@ -51,6 +52,12 @@ export const KitchenMenuControl: React.FC = () => {
     preparation_duration: '15',
   });
   const [ingredientRows, setIngredientRows] = useState<{ inventory_item_id: string; quantity_required: string; unit: string }[]>([]);
+
+  // Import drinks from stock at a manager-chosen markup
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importMarkup, setImportMarkup] = useState('100');
+  const [repriceExisting, setRepriceExisting] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   const fetchMenuItems = async () => {
     try {
@@ -233,6 +240,27 @@ export const KitchenMenuControl: React.FC = () => {
   };
 
   const isChef = user?.role === 'chef';
+  // Importing bar stock into the menu is a pricing decision — managers and admins only.
+  const canImportDrinks = user?.role === 'admin' || user?.role === 'manager';
+
+  const handleImportDrinks = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const markup = parseFloat(importMarkup);
+    if (!Number.isFinite(markup) || markup < 0 || markup > 1000) {
+      return error('Invalid rate', 'Enter a markup between 0 and 1000 percent');
+    }
+    setImporting(true);
+    try {
+      const res: any = await api.syncDrinksToMenu({ markup_percent: markup, reprice_existing: repriceExisting });
+      success('Drinks imported', res.message);
+      setShowImportModal(false);
+      fetchMenuItems();
+    } catch (err: any) {
+      error('Import failed', err.message);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const filtered = menuItems.filter((it) => {
     const matchCat = selectedCategory === 'all' || it.category_id === selectedCategory;
@@ -271,6 +299,15 @@ export const KitchenMenuControl: React.FC = () => {
           >
             <Plus className="w-3.5 h-3.5" /> New Menu Item
           </button>
+          {canImportDrinks && (
+            <button
+              onClick={() => setShowImportModal(true)}
+              className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-transform active:scale-95"
+              title="Publish Drink stock to the Drinks & Bar menu at a markup you choose"
+            >
+              <Download className="w-3.5 h-3.5" /> Import Drinks
+            </button>
+          )}
           <button
             onClick={fetchMenuItems}
             className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 transition-colors"
@@ -707,6 +744,94 @@ export const KitchenMenuControl: React.FC = () => {
                 {submitting ? 'Dropping...' : 'Drop Item'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import Drinks From Stock — manager/admin sets the rate */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Download className="w-5 h-5 text-sky-400" /> Import Drinks From Stock
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Publishes every Drink item in inventory to the Drinks &amp; Bar menu, linked to live stock.
+            </p>
+
+            <form onSubmit={handleImportDrinks} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Markup rate (%)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1000"
+                  step="1"
+                  value={importMarkup}
+                  onChange={(e) => setImportMarkup(e.target.value)}
+                  autoFocus
+                  required
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white"
+                />
+                <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                  {[50, 100, 150, 200].map((r) => (
+                    <button
+                      key={r}
+                      type="button"
+                      onClick={() => setImportMarkup(String(r))}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
+                        parseFloat(importMarkup) === r
+                          ? 'bg-sky-600 text-white border-sky-500'
+                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                      }`}
+                    >
+                      {r}%
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-2">
+                  Selling price = cost + {Number.isFinite(parseFloat(importMarkup)) ? parseFloat(importMarkup) : 0}% , rounded up to the nearest 100.
+                  A 1,000 {CURRENCY_SYMBOL} drink at {Number.isFinite(parseFloat(importMarkup)) ? parseFloat(importMarkup) : 0}% sells for{' '}
+                  <span className="font-mono font-bold text-sky-300">
+                    {formatCurrency(Math.max(100, Math.ceil((1000 * (1 + (parseFloat(importMarkup) || 0) / 100)) / 100) * 100))}
+                  </span>.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-950/60 border border-slate-800 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={repriceExisting}
+                  onChange={(e) => setRepriceExisting(e.target.checked)}
+                  className="mt-0.5 accent-sky-500"
+                />
+                <span className="text-[11px] text-slate-300 leading-relaxed">
+                  <strong className="text-white">Also reprice drinks already on the menu.</strong>
+                  <br />
+                  <span className="text-slate-400">
+                    Leave this off to set the rate only for newly imported drinks and keep any prices you edited by hand.
+                  </span>
+                </span>
+              </label>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={importing}
+                  className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  {importing ? 'Importing...' : 'Import Drinks'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

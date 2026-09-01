@@ -237,6 +237,50 @@ financeRouter.get('/finance/expenses', authMiddleware, requireRoles(['admin', 'm
 });
 
 // DELETE /api/finance/room-revenues - Admin: clean up all Room revenues (payments + invoices)
+// DELETE /api/finance/expenses/:id - Admin: delete one expense
+financeRouter.delete('/finance/expenses/:id', authMiddleware, requireRoles(['admin']), async (req: Request, res: Response) => {
+  try {
+    const exp = await dbGet<any>('SELECT * FROM expenses WHERE id = ?', [req.params.id]);
+    if (!exp) return res.status(404).json({ error: 'Expense not found' });
+
+    await dbRun('DELETE FROM expenses WHERE id = ?', [exp.id]);
+    await logAudit(req.user, 'Finance', 'Expense Deleted', exp.id, `Admin ${req.user?.username} deleted expense #${exp.expense_number} (${exp.title}, ${exp.amount})`, req.ip);
+    return res.json({ message: `Expense #${exp.expense_number} deleted`, deleted: 1 });
+  } catch (err:any) {
+    console.error('Delete expense error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to delete expense' });
+  }
+});
+
+// DELETE /api/finance/expenses - Admin: delete selected expenses, or all of them.
+// Body { ids: [...] } deletes just those; an empty/absent list clears everything.
+financeRouter.delete('/finance/expenses', authMiddleware, requireRoles(['admin']), async (req: Request, res: Response) => {
+  try {
+    const ids: unknown = req.body?.ids;
+    const selected = Array.isArray(ids) ? ids.filter((x) => typeof x === 'string' && x) : [];
+
+    if (selected.length > 0) {
+      // Parameterised IN list — never interpolate ids into the SQL.
+      const placeholders = selected.map(() => '?').join(', ');
+      const rows = await dbAll<any>(`SELECT id FROM expenses WHERE id IN (${placeholders})`, selected);
+      if (rows.length === 0) return res.status(404).json({ error: 'None of the selected expenses exist' });
+
+      await dbRun(`DELETE FROM expenses WHERE id IN (${placeholders})`, selected);
+      await logAudit(req.user, 'Finance', 'Expenses Bulk Delete', null, `Admin ${req.user?.username} deleted ${rows.length} selected expense(s)`, req.ip);
+      return res.json({ message: `${rows.length} expense(s) deleted`, deleted: rows.length });
+    }
+
+    // Postgres returns COUNT(*) as a bigint string — coerce before reporting.
+    const total = Number((await dbGet<any>('SELECT COUNT(*) as cnt FROM expenses'))?.cnt) || 0;
+    await dbRun('DELETE FROM expenses');
+    await logAudit(req.user, 'Finance', 'Expenses Bulk Delete', null, `Admin ${req.user?.username} cleared all expenses (${total})`, req.ip);
+    return res.json({ message: `All expenses cleared (${total} deleted)`, deleted: total });
+  } catch (err:any) {
+    console.error('Bulk delete expenses error:', err);
+    return res.status(500).json({ error: err.message || 'Failed to delete expenses' });
+  }
+});
+
 financeRouter.delete('/finance/room-revenues', authMiddleware, requireRoles(['admin']), async (req: Request, res: Response) => {
   try {
     const countPayments = (await dbGet<any>(`SELECT COUNT(*) as cnt FROM payments WHERE payment_category IN ('Room','Deposit')`))?.cnt || 0;

@@ -28,6 +28,7 @@ import { financeRouter } from "./server/routes/finance";
 import { reportsRouter } from "./server/routes/reports";
 import { systemRouter } from "./server/routes/system";
 import { cmsRouter } from "./server/routes/cms";
+import { debtorsRouter } from "./server/routes/debtors";
 import { checkSupabaseConnection } from "./server/lib/supabase";
 
 async function startServer() {
@@ -117,6 +118,7 @@ async function startServer() {
   app.use("/api", reportsRouter);
   app.use("/api", systemRouter);
   app.use("/api", cmsRouter);
+  app.use("/api", debtorsRouter);
 
   // Global error handler for API routes — catches unhandled DB errors and returns JSON
   app.use("/api", (err: any, _req: any, res: any, _next: any) => {

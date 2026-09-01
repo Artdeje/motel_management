@@ -9,8 +9,18 @@ export const menuRouter = Router();
 // to the nearest 100 (RWF prices are whole numbers). Managers can edit any price
 // afterwards through normal menu CRUD — this only sets the opening price.
 const DRINK_MARKUP = Number(process.env.DRINK_MENU_MARKUP) || 2;
-function drinkSellingPrice(unitCost: number): number {
-  const base = (Number(unitCost) || 0) * DRINK_MARKUP;
+
+/**
+ * Selling price from purchase cost.
+ * `markupPercent` is the margin added on top of cost — 100 means "sell at
+ * double cost". Falls back to the DRINK_MENU_MARKUP multiplier when the caller
+ * does not specify one, which keeps the automatic sync behaving as before.
+ */
+function drinkSellingPrice(unitCost: number, markupPercent?: number): number {
+  const cost = Number(unitCost) || 0;
+  const base = Number.isFinite(markupPercent as number)
+    ? cost * (1 + (markupPercent as number) / 100)
+    : cost * DRINK_MARKUP;
   return Math.max(100, Math.ceil(base / 100) * 100);
 }
 
@@ -24,7 +34,7 @@ function drinkSellingPrice(unitCost: number): number {
  *
  * Returns counts rather than throwing — the menu must still load if this fails.
  */
-export async function syncDrinksToMenu(): Promise<{ created: number; skipped: number; error?: string }> {
+export async function syncDrinksToMenu(opts?: { markupPercent?: number; repriceExisting?: boolean }): Promise<{ created: number; skipped: number; repriced?: number; error?: string }> {
   try {
     let barCat = await dbGet<any>("SELECT id FROM menu_categories WHERE name = 'Drinks & Bar'");
     if (!barCat?.id) {
@@ -52,13 +62,21 @@ export async function syncDrinksToMenu(): Promise<{ created: number; skipped: nu
       (await dbAll<any>('SELECT DISTINCT menu_item_id FROM menu_item_ingredients')).map((r) => String(r.menu_item_id))
     );
 
-    let created = 0, skipped = 0;
+    let created = 0, skipped = 0, repriced = 0;
     for (const d of drinks) {
       const id = `menu-drink-${d.id}`;
 
       // Check our own id BEFORE the name check: an already-published drink must
       // still get its stock link repaired, and the name check would skip past it.
       if (existingIds.has(id)) {
+        // An explicit import with a chosen rate reprices what is already on the
+        // menu; the automatic background sync never touches existing prices.
+        if (opts?.repriceExisting && Number.isFinite(opts?.markupPercent as number)) {
+          await dbRun('UPDATE menu_items SET price = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [
+            drinkSellingPrice(d.unit_cost, opts!.markupPercent), id,
+          ]);
+          repriced++;
+        }
         // Without the link the item falls back to a flat 50 servings and stops
         // tracking real bar stock.
         if (!linkedIds.has(id)) {
@@ -82,7 +100,7 @@ export async function syncDrinksToMenu(): Promise<{ created: number; skipped: nu
         await dbRun(
           `INSERT INTO menu_items (id, name, category_id, description, price, preparation_duration, is_active, is_available)
            VALUES (?, ?, ?, ?, ?, ?, 1, 1)`,
-          [id, d.name, barCat.id, `Bar stock item — served by the ${d.unit || 'unit'}`, drinkSellingPrice(d.unit_cost), 2]
+          [id, d.name, barCat.id, `Bar stock item — served by the ${d.unit || 'unit'}`, drinkSellingPrice(d.unit_cost, opts?.markupPercent), 2]
         );
         // Link 1 stock unit per serving so availability tracks live bar stock.
         await dbRun(
@@ -94,7 +112,7 @@ export async function syncDrinksToMenu(): Promise<{ created: number; skipped: nu
       created++;
     }
     if (created > 0) console.log(`[Menu] Published ${created} drink(s) from inventory to Drinks & Bar`);
-    return { created, skipped };
+    return { created, skipped, repriced };
   } catch (e: any) {
     console.error('[Menu] Drink sync failed:', e?.message || e);
     return { created: 0, skipped: 0, error: e?.message || String(e) };
@@ -327,10 +345,28 @@ menuRouter.delete('/menu/items/:id', authMiddleware, requireRoles(['admin', 'man
 // Runs automatically on every menu load; this endpoint is for an explicit
 // "sync now" action and reports what it did.
 menuRouter.post('/menu/sync-drinks', authMiddleware, requireRoles(['admin', 'manager']), async (req: Request, res: Response) => {
-  const result = await syncDrinksToMenu();
+  const { markup_percent, reprice_existing } = req.body || {};
+
+  let markupPercent: number | undefined;
+  if (markup_percent !== undefined && markup_percent !== null && markup_percent !== '') {
+    markupPercent = parseFloat(markup_percent);
+    if (!Number.isFinite(markupPercent) || markupPercent < 0 || markupPercent > 1000) {
+      return res.status(400).json({ error: 'Markup must be a number between 0 and 1000 percent' });
+    }
+  }
+
+  const result = await syncDrinksToMenu({ markupPercent, repriceExisting: !!reprice_existing });
   if (result.error) return res.status(500).json({ error: result.error });
-  await logAudit(req.user!, 'Menu', 'Sync drinks from inventory', null, `Published ${result.created} drink(s), ${result.skipped} already on menu`, req.ip);
-  return res.json({ message: `Published ${result.created} drink(s) to Drinks & Bar`, ...result });
+
+  const rateNote = markupPercent === undefined ? 'default rate' : `${markupPercent}% markup`;
+  await logAudit(
+    req.user!, 'Menu', 'Import drinks from stock', null,
+    `Published ${result.created}, repriced ${result.repriced || 0} at ${rateNote}`, req.ip
+  );
+  return res.json({
+    message: `Imported ${result.created} new drink(s)${result.repriced ? `, repriced ${result.repriced}` : ''} at ${rateNote}`,
+    ...result,
+  });
 });
 
 menuRouter.get('/menu/categories', authMiddleware, async (req: Request, res: Response) => {

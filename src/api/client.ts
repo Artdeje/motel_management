@@ -192,6 +192,21 @@ export const api = {
   createExpense: (expense: any) => request('/api/finance/expenses', { method: 'POST', body: JSON.stringify(expense) }),
   clearRoomRevenues: () => request('/api/finance/room-revenues', { method: 'DELETE' }),
 
+  // Expenses cleanup (admin): one by one, selected, or all
+  deleteExpense: (id: string) => request(`/api/finance/expenses/${id}`, { method: 'DELETE' }),
+  deleteExpenses: (ids?: string[]) =>
+    request('/api/finance/expenses', { method: 'DELETE', body: JSON.stringify({ ids: ids || [] }) }),
+
+  // Import drinks from stock into the menu at a chosen markup (admin/manager)
+  syncDrinksToMenu: (payload?: { markup_percent?: number; reprice_existing?: boolean }) =>
+    request('/api/menu/sync-drinks', { method: 'POST', body: JSON.stringify(payload || {}) }),
+
+  // Debtors — unpaid tabs recorded at the bar
+  getDebtors: (status?: string) => request(`/api/debtors${status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : ''}`),
+  createDebtor: (debt: any) => request('/api/debtors', { method: 'POST', body: JSON.stringify(debt) }),
+  payDebtor: (id: string, payload: any) => request(`/api/debtors/${id}/pay`, { method: 'POST', body: JSON.stringify(payload) }),
+  deleteDebtor: (id: string) => request(`/api/debtors/${id}`, { method: 'DELETE' }),
+
   // Reports
   getReportsSummary: (period?: any) => {
     const p = typeof period === 'object' && period ? period.timeframe || period.period : period;

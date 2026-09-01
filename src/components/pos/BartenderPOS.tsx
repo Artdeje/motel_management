@@ -11,6 +11,7 @@ import {
   Send,
   RefreshCw,
   ShoppingBag,
+  Wine,
 } from 'lucide-react';
 import { formatCurrency, CURRENCY_SYMBOL } from '../../utils/currency';
 
@@ -30,7 +31,7 @@ export const BartenderPOS: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [orderType, setOrderType] = useState<'Table' | 'Room Service'>('Table');
+  const [orderType, setOrderType] = useState<'Table' | 'Room Service' | 'Bar Counter'>('Table');
   const [tableNumber, setTableNumber] = useState('1');
   const [selectedRoomId, setSelectedRoomId] = useState('');
   const [discount, setDiscount] = useState('0');
@@ -193,31 +194,31 @@ export const BartenderPOS: React.FC = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-2 gap-2 p-1 bg-slate-800 rounded-xl">
-          <button
-            onClick={() => setOrderType('Table')}
-            className={`py-2 rounded-lg text-xs font-semibold transition-all ${
-              orderType === 'Table'
-                ? 'bg-amber-500 text-slate-950 font-bold shadow'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Table Service
-          </button>
-          <button
-            onClick={() => setOrderType('Room Service')}
-            className={`py-2 rounded-lg text-xs font-semibold transition-all ${
-              orderType === 'Room Service'
-                ? 'bg-amber-500 text-slate-950 font-bold shadow'
-                : 'text-slate-400 hover:text-white'
-            }`}
-          >
-            Room Service
-          </button>
+        <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-800 rounded-xl">
+          {(['Table', 'Room Service', 'Bar Counter'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setOrderType(t)}
+              className={`py-2 rounded-lg text-[11px] font-semibold transition-all ${
+                orderType === t
+                  ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              {t === 'Table' ? 'Table' : t === 'Room Service' ? 'Room' : 'Bar Counter'}
+            </button>
+          ))}
         </div>
 
         <div className="mt-3">
-          {orderType === 'Table' ? (
+          {orderType === 'Bar Counter' ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-800/60 border border-slate-700/60">
+              <Wine className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="text-[11px] text-slate-300 font-medium">
+                Served at the counter — no table or room needed
+              </span>
+            </div>
+          ) : orderType === 'Table' ? (
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-300 font-semibold shrink-0">Table:</span>
               <select

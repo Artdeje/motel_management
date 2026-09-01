@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './context/ToastContext';
 import { CmsProvider, useCms } from './context/CmsContext';
 import { ThemeProvider } from './context/ThemeContext';
+import { DebtorsManager } from './components/debtors/DebtorsManager';
 import { Navbar } from './components/layout/Navbar';
 import { Sidebar, NavView } from './components/layout/Sidebar';
 import { LoginPage } from './components/auth/LoginPage';
@@ -64,6 +65,8 @@ const MainAppContent: React.FC = () => {
         return <BartenderPOS />;
       case 'orders':
         return <OrderManager />;
+      case 'debtors':
+        return <DebtorsManager />;
       case 'kitchen-orders':
         return <KitchenOrdersView />;
       case 'menu':

@@ -29,6 +29,9 @@ export const FinanceDashboard: React.FC = () => {
   const [overview, setOverview] = useState<any>(null);
   const [invoices, setInvoices] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
+  // Expense cleanup (admin): tick rows, or clear the lot.
+  const [selectedExpenses, setSelectedExpenses] = useState<string[]>([]);
+  const [deletingExpenses, setDeletingExpenses] = useState(false);
   const [payments, setPayments] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'invoices' | 'expenses' | 'payments'>('overview');
   const [cleaning, setCleaning] = useState(false);
@@ -124,6 +127,46 @@ export const FinanceDashboard: React.FC = () => {
   const totalRev = overview?.totalRevenue || 0;
   const totalExp = overview?.totalExpenses || 0;
   const netProfit = overview?.netIncome || 0;
+  const canDeleteExpenses = user?.role === 'admin';
+
+  const toggleExpense = (id: string) =>
+    setSelectedExpenses((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const toggleAllExpenses = () =>
+    setSelectedExpenses((prev) => (prev.length === expenses.length ? [] : expenses.map((e) => e.id)));
+
+  const handleDeleteOneExpense = async (exp: any) => {
+    if (!window.confirm(`Delete expense "${exp.title}" (${formatCurrency(exp.amount)})? This cannot be undone.`)) return;
+    setDeletingExpenses(true);
+    try {
+      await api.deleteExpense(exp.id);
+      success('Expense deleted', `#${exp.expense_number || exp.id} removed`);
+      setSelectedExpenses((prev) => prev.filter((x) => x !== exp.id));
+      fetchFinanceData();
+    } catch (err: any) {
+      error('Delete failed', err.message);
+    } finally {
+      setDeletingExpenses(false);
+    }
+  };
+
+  const handleDeleteSelectedExpenses = async () => {
+    const count = selectedExpenses.length;
+    if (count === 0) return;
+    if (!window.confirm(`Delete ${count} selected expense${count === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    setDeletingExpenses(true);
+    try {
+      const res: any = await api.deleteExpenses(selectedExpenses);
+      success('Expenses deleted', res.message);
+      setSelectedExpenses([]);
+      fetchFinanceData();
+    } catch (err: any) {
+      error('Delete failed', err.message);
+    } finally {
+      setDeletingExpenses(false);
+    }
+  };
+
   const expensesByCat = overview?.expensesByCategory || [];
   const revenueByDept = [
     { name: 'Room Accommodation', value: overview?.roomRevenue || 0, color: '#3b82f6' },
@@ -524,20 +567,71 @@ export const FinanceDashboard: React.FC = () => {
       {/* TAB 3: EXPENSES */}
       {activeTab === 'expenses' && (
         <div className="bg-slate-900/90 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+          {canDeleteExpenses && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 border-b border-slate-800 bg-slate-950/40">
+              <p className="text-[11px] text-slate-400 font-medium">
+                {selectedExpenses.length > 0
+                  ? `${selectedExpenses.length} of ${expenses.length} selected`
+                  : `${expenses.length} expense${expenses.length === 1 ? '' : 's'} — tick rows to remove them`}
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDeleteSelectedExpenses}
+                  disabled={selectedExpenses.length === 0 || deletingExpenses}
+                  className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  {deletingExpenses ? 'Deleting...' : `Delete Selected${selectedExpenses.length ? ` (${selectedExpenses.length})` : ''}`}
+                </button>
+              </div>
+            </div>
+          )}
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 font-semibold">
                 <tr>
+                  {canDeleteExpenses && (
+                    <th className="p-3.5 w-10">
+                      <input
+                        type="checkbox"
+                        checked={expenses.length > 0 && selectedExpenses.length === expenses.length}
+                        onChange={toggleAllExpenses}
+                        className="accent-rose-500 cursor-pointer"
+                        title="Select all"
+                      />
+                    </th>
+                  )}
                   <th className="p-3.5">Date</th>
                   <th className="p-3.5">Category</th>
                   <th className="p-3.5">Description</th>
                   <th className="p-3.5">Payment Method</th>
                   <th className="p-3.5">Amount</th>
+                  {canDeleteExpenses && <th className="p-3.5 w-12"></th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80 text-slate-300">
+                {expenses.length === 0 && (
+                  <tr>
+                    <td colSpan={canDeleteExpenses ? 7 : 5} className="p-8 text-center text-slate-500 text-xs">
+                      No expenses recorded
+                    </td>
+                  </tr>
+                )}
                 {expenses.map((exp) => (
-                  <tr key={exp.id} className="hover:bg-slate-800/50 transition-colors">
+                  <tr
+                    key={exp.id}
+                    className={`hover:bg-slate-800/50 transition-colors ${selectedExpenses.includes(exp.id) ? 'bg-rose-500/5' : ''}`}
+                  >
+                    {canDeleteExpenses && (
+                      <td className="p-3.5">
+                        <input
+                          type="checkbox"
+                          checked={selectedExpenses.includes(exp.id)}
+                          onChange={() => toggleExpense(exp.id)}
+                          className="accent-rose-500 cursor-pointer"
+                        />
+                      </td>
+                    )}
                     <td className="p-3.5 text-slate-400">{exp.expense_date}</td>
                     <td className="p-3.5">
                       <span className="px-2 py-0.5 rounded bg-slate-800 font-semibold text-slate-200 text-[10px]">
@@ -549,6 +643,18 @@ export const FinanceDashboard: React.FC = () => {
                     <td className="p-3.5 font-mono font-bold text-rose-400">
                       -{formatCurrency(exp.amount)}
                     </td>
+                    {canDeleteExpenses && (
+                      <td className="p-3.5">
+                        <button
+                          onClick={() => handleDeleteOneExpense(exp)}
+                          disabled={deletingExpenses}
+                          className="p-1.5 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 rounded-lg disabled:opacity-40"
+                          title="Delete this expense"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

@@ -435,6 +435,24 @@ async function runMigrationsMySql(p: MySqlPool): Promise<void> {
     `);
   }
   await ensureOtpTableMySql(p);
+  await p.query(`
+    CREATE TABLE IF NOT EXISTS debtors (
+      id VARCHAR(36) PRIMARY KEY,
+      debtor_name VARCHAR(150) NOT NULL,
+      phone VARCHAR(30),
+      order_id VARCHAR(36),
+      amount DECIMAL(10, 2) NOT NULL,
+      amount_paid DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+      reason TEXT,
+      status VARCHAR(20) NOT NULL DEFAULT 'Outstanding',
+      recorded_by VARCHAR(36) NOT NULL,
+      settled_at DATETIME NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_debtors_status (status),
+      FOREIGN KEY (recorded_by) REFERENCES users(id)
+    )
+  `);
 }
 
 // --- Postgres init/migrations ---
@@ -590,6 +608,38 @@ async function runMigrationsPg(p: PgPool): Promise<void> {
     `);
   }
   await ensureOtpTablePg(p);
+  await ensureDebtorsTablePg(p);
+}
+
+// Debtors: unpaid bar/restaurant tabs recorded by the bartender and settled
+// later. Kept separate from payments so an outstanding debt never counts as
+// revenue until it is actually collected.
+async function ensureDebtorsTablePg(p: PgPool) {
+  const { rows } = await p.query(
+    `SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name='debtors'`,
+  );
+  if (rows.length === 0) {
+    console.log("[DB] Migrating: Creating debtors table (PG)...");
+    await p.query(`
+      CREATE TABLE IF NOT EXISTS debtors (
+        id VARCHAR(36) PRIMARY KEY,
+        debtor_name VARCHAR(150) NOT NULL,
+        phone VARCHAR(30),
+        order_id VARCHAR(36),
+        amount DECIMAL(10, 2) NOT NULL,
+        amount_paid DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+        reason TEXT,
+        status VARCHAR(20) NOT NULL DEFAULT 'Outstanding',
+        recorded_by VARCHAR(36) NOT NULL,
+        settled_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (recorded_by) REFERENCES users(id)
+      )
+    `);
+    await p.query(`CREATE INDEX IF NOT EXISTS idx_debtors_status ON debtors(status)`);
+    await p.query(`CREATE INDEX IF NOT EXISTS idx_debtors_recorded_by ON debtors(recorded_by)`);
+  }
 }
 
 // --- Connection helper for query execution ---

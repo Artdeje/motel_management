@@ -356,7 +356,11 @@ export const OrderManager: React.FC = () => {
                   <div>
                     <span className="text-sm font-bold text-white">#{ord.order_number}</span>
                     <p className="text-xs text-amber-400 font-semibold">
-                      {ord.order_type === 'Table' ? `📍 Table #${ord.table_number}` : `🛏️ Room #${ord.room_number}`}
+                      {ord.order_type === 'Table'
+                        ? `📍 Table #${ord.table_number}`
+                        : ord.order_type === 'Room Service'
+                        ? `🛏️ Room #${ord.room_number}`
+                        : `🍸 ${ord.order_type}`}
                     </p>
                   </div>
                   <div className="text-right">
