@@ -196,6 +196,70 @@ function translateSql(sql: string, paramsLengthHint?: number): string {
     "TO_CHAR($1, 'HH24:00')",
   );
 
+  // 5b. Generic DATE_FORMAT over ANY expression, including aggregates such as
+  // DATE_FORMAT(MIN(o.updated_at), '%Y-%m-%d'). The rules above only match a
+  // bare column, so a wrapped expression reached Postgres untranslated and blew
+  // up with "function date_format(timestamp with time zone, unknown) does not
+  // exist" — this is what broke the kitchen orders chart.
+  const MYSQL_TO_PG_DATE_FORMAT: Record<string, string> = {
+    "%Y-%m-%d": "YYYY-MM-DD",
+    "%Y-%m": "YYYY-MM",
+    "%Y": "YYYY",
+    "%d/%m/%Y": "DD/MM/YYYY",
+    "%b %Y": "Mon YYYY",
+    "%b %d": "Mon DD",
+    "%H:00": "HH24:00",
+    "%H:%i": "HH24:MI",
+    "%x-W%v": 'IYYY"-W"IW', // ISO year + ISO week
+    "%Y-W%v": 'YYYY"-W"IW',
+  };
+  out = out.replace(
+    // one optional level of function wrapping, e.g. MIN(col) or col
+    /DATE_FORMAT\s*\(\s*((?:[A-Za-z0-9_]+\s*\([^()]*\))|(?:[A-Za-z0-9_.]+))\s*,\s*'([^']*)'\s*\)/gi,
+    (_m, expr: string, fmt: string) => {
+      const pg = MYSQL_TO_PG_DATE_FORMAT[fmt];
+      if (pg) return `TO_CHAR(${expr}, '${pg}')`;
+      // Best-effort token translation for anything not listed above.
+      const converted = fmt
+        .replace(/%Y/g, "YYYY").replace(/%y/g, "YY")
+        .replace(/%m/g, "MM").replace(/%d/g, "DD")
+        .replace(/%H/g, "HH24").replace(/%i/g, "MI").replace(/%s/g, "SS")
+        .replace(/%b/g, "Mon").replace(/%M/g, "Month")
+        .replace(/%x/g, "IYYY").replace(/%v/g, "IW");
+      return `TO_CHAR(${expr}, '${converted}')`;
+    },
+  );
+
+  // 5c. MySQL date part functions -> EXTRACT. WEEK(col, mode) drops the mode
+  // argument; Postgres EXTRACT(WEEK ...) is already ISO-8601.
+  out = out.replace(
+    /\bWEEK\s*\(\s*([^,()]+?)\s*(?:,\s*[0-9]+\s*)?\)/gi,
+    "EXTRACT(WEEK FROM $1)",
+  );
+  out = out.replace(/\bYEAR\s*\(\s*([^()]+?)\s*\)/gi, "EXTRACT(YEAR FROM $1)");
+  out = out.replace(/\bMONTH\s*\(\s*([^()]+?)\s*\)/gi, "EXTRACT(MONTH FROM $1)");
+  out = out.replace(/\bHOUR\s*\(\s*([^()]+?)\s*\)/gi, "EXTRACT(HOUR FROM $1)");
+
+  // 5d. TIMESTAMPDIFF(unit, start, end) -> seconds difference scaled to unit.
+  // Postgres has no TIMESTAMPDIFF and read MINUTE as a column, which is what
+  // broke /api/kitchen/stats with 'column "minute" does not exist'.
+  const TIMESTAMPDIFF_DIVISOR: Record<string, number> = {
+    SECOND: 1,
+    MINUTE: 60,
+    HOUR: 3600,
+    DAY: 86400,
+    WEEK: 604800,
+  };
+  out = out.replace(
+    /TIMESTAMPDIFF\s*\(\s*([A-Za-z]+)\s*,\s*([^,()]+?)\s*,\s*([^,()]+?)\s*\)/gi,
+    (m, unit: string, startExpr: string, endExpr: string) => {
+      const div = TIMESTAMPDIFF_DIVISOR[unit.toUpperCase()];
+      if (!div) return m; // leave untouched rather than emit something wrong
+      const diff = `EXTRACT(EPOCH FROM (${endExpr} - ${startExpr}))`;
+      return div === 1 ? diff : `(${diff} / ${div})`;
+    },
+  );
+
   // 6. DATE(col) = ? -> col::date = ?
   out = out.replace(
     /DATE\s*\(\s*o\.created_at\s*\)\s*=\s*\?/gi,
@@ -240,6 +304,12 @@ export async function getDatabase(): Promise<MySqlPool | PgPool> {
         ? false
         : { rejectUnauthorized: false },
       max: 10,
+    });
+    // Supabase's pooler drops idle connections. Without this listener the error
+    // surfaces on an idle client as an uncaught exception rather than a failed
+    // query; pg discards the bad client and the next request gets a fresh one.
+    pgPool.on("error", (err) => {
+      console.error("[DB] Idle Postgres client error (connection dropped):", err?.message || err);
     });
     // Test connection
     const client = await pgPool.connect();

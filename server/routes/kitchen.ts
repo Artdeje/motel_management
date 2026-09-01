@@ -59,13 +59,16 @@ kitchenRouter.get('/kitchen/stats', authMiddleware, requireRoles(['admin', 'mana
          AND mc.name NOT IN ('Drinks & Bar')`
     );
 
+    // Postgres returns COUNT/SUM/AVG as strings; send real numbers so callers
+    // can do arithmetic without silently concatenating.
+    const num = (v: any) => Number(v) || 0;
     return res.json({
-      activeOrders: activeCount?.cnt || 0,
-      avgPrepTime: avgPrep?.avg_minutes ? Math.round(avgPrep.avg_minutes) : 0,
-      todayWasteCost: wasteCost?.total_cost || 0,
-      todayUsageCount: usageCount?.cnt || 0,
-      lowStockCount: lowStock?.cnt || 0,
-      todayRevenue: revenue?.total_revenue || 0,
+      activeOrders: num(activeCount?.cnt),
+      avgPrepTime: Math.round(num(avgPrep?.avg_minutes)),
+      todayWasteCost: num(wasteCost?.total_cost),
+      todayUsageCount: num(usageCount?.cnt),
+      lowStockCount: num(lowStock?.cnt),
+      todayRevenue: num(revenue?.total_revenue),
     });
   } catch (err: any) {
     console.error('Kitchen stats error:', err);
@@ -121,7 +124,16 @@ kitchenRouter.get('/kitchen/orders-chart', authMiddleware, requireRoles(['admin'
       [limit]
     );
 
-    return res.json({ chartData: rows.reverse() });
+    // Recharts needs numbers — Postgres hands COUNT/SUM back as strings, which
+    // would plot as zero-height bars.
+    const chartData = rows
+      .map((r) => ({
+        period_label: String(r.period_label),
+        orders_completed: Number(r.orders_completed) || 0,
+        revenue: Number(r.revenue) || 0,
+      }))
+      .reverse();
+    return res.json({ chartData });
   } catch (err: any) {
     console.error('Kitchen chart error:', err);
     return res.status(500).json({ error: 'Failed to load kitchen chart data' });
