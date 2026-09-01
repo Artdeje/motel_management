@@ -64,6 +64,7 @@ export const KitchenMenuControl: React.FC = () => {
   const [linkPreview, setLinkPreview] = useState<any>(null);
   const [linkQty, setLinkQty] = useState('1');
   const [linking, setLinking] = useState(false);
+  const [acceptedSuggestions, setAcceptedSuggestions] = useState<string[]>([]);
 
   const fetchMenuItems = async () => {
     try {
@@ -259,6 +260,8 @@ export const KitchenMenuControl: React.FC = () => {
     try {
       const res: any = await api.linkMenuToStock({ dry_run: true });
       setLinkPreview(res);
+      // Suggestions start unticked — a near name is a guess until confirmed.
+      setAcceptedSuggestions([]);
     } catch (err: any) {
       error('Could not build preview', err.message);
       setShowLinkModal(false);
@@ -272,7 +275,12 @@ export const KitchenMenuControl: React.FC = () => {
     if (!Number.isFinite(q) || q <= 0) return error('Invalid quantity', 'Enter a quantity greater than zero');
     setLinking(true);
     try {
-      const res: any = await api.linkMenuToStock({ quantity_required: q });
+      const exactIds = (linkPreview?.matches || []).map((m: any) => m.menu_item_id);
+      const res: any = await api.linkMenuToStock({
+        quantity_required: q,
+        include_similar: acceptedSuggestions.length > 0,
+        menu_item_ids: [...exactIds, ...acceptedSuggestions],
+      });
       success('Menu linked to stock', res.message);
       setShowLinkModal(false);
       fetchMenuItems();
@@ -940,6 +948,44 @@ export const KitchenMenuControl: React.FC = () => {
                   </div>
                 </div>
 
+                {(linkPreview.suggested || []).length > 0 && (
+                  <div className="mt-3 rounded-xl border border-sky-500/25 bg-sky-500/5 overflow-hidden">
+                    <p className="text-[11px] font-bold text-sky-300 uppercase tracking-wider px-3 py-2 border-b border-sky-500/20">
+                      Similar names ({linkPreview.suggested.length}) — tick to include
+                    </p>
+                    <div className="max-h-52 overflow-y-auto divide-y divide-slate-800">
+                      {linkPreview.suggested.map((m: any) => (
+                        <label key={m.menu_item_id} className="flex items-center gap-2.5 px-3 py-2 cursor-pointer hover:bg-slate-800/40">
+                          <input
+                            type="checkbox"
+                            checked={acceptedSuggestions.includes(m.menu_item_id)}
+                            onChange={() =>
+                              setAcceptedSuggestions((prev) =>
+                                prev.includes(m.menu_item_id)
+                                  ? prev.filter((x) => x !== m.menu_item_id)
+                                  : [...prev, m.menu_item_id]
+                              )
+                            }
+                            className="accent-sky-500 shrink-0"
+                          />
+                          <span className="text-[11px] text-white font-semibold truncate flex-1">{m.menu_item}</span>
+                          <span className="text-[10px] text-slate-400 shrink-0">
+                            &rarr; {m.stock_item} <span className="font-mono">({m.in_stock} {m.unit})</span>
+                          </span>
+                          {m.score !== undefined && (
+                            <span className="text-[9px] font-bold text-sky-300 bg-sky-500/15 border border-sky-500/25 rounded px-1.5 py-0.5 shrink-0">
+                              {Math.round(m.score * 100)}%
+                            </span>
+                          )}
+                        </label>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-500 px-3 py-2 border-t border-slate-800">
+                      Check the stock item is really what the dish consumes before ticking.
+                    </p>
+                  </div>
+                )}
+
                 {(linkPreview.unmatched || []).length > 0 && (
                   <div className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/5 overflow-hidden">
                     <p className="text-[11px] font-bold text-amber-300 uppercase tracking-wider px-3 py-2 border-b border-amber-500/20">
@@ -966,11 +1012,11 @@ export const KitchenMenuControl: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmLinkStock}
-                disabled={linking || !linkPreview || (linkPreview.matches || []).length === 0}
+                disabled={linking || !linkPreview || ((linkPreview.matches || []).length + acceptedSuggestions.length) === 0}
                 className="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-xl shadow disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 <Layers className="w-3.5 h-3.5" />
-                {linking ? 'Linking...' : `Link ${(linkPreview?.matches || []).length} Item(s)`}
+                {linking ? 'Linking...' : `Link ${((linkPreview?.matches || []).length + acceptedSuggestions.length)} Item(s)`}
               </button>
             </div>
           </div>

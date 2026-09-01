@@ -203,7 +203,7 @@ export const api = {
 
   // Link stock-untracked menu items to a same-named inventory item.
   // dry_run returns the proposed pairs without writing anything.
-  linkMenuToStock: (payload?: { dry_run?: boolean; quantity_required?: number }) =>
+  linkMenuToStock: (payload?: { dry_run?: boolean; quantity_required?: number; include_similar?: boolean; menu_item_ids?: string[] }) =>
     request('/api/menu/link-stock', { method: 'POST', body: JSON.stringify(payload || {}) }),
 
   // Debtors — unpaid tabs recorded at the bar

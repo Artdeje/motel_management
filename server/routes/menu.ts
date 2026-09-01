@@ -358,7 +358,37 @@ menuRouter.post('/menu/link-stock', authMiddleware, requireRoles(['admin', 'mana
       return res.status(400).json({ error: 'Quantity per serving must be greater than zero' });
     }
 
-    const norm = (v: any) => String(v || '').trim().toLowerCase();
+    const norm = (v: any) => String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    // Loose key for near-misses: letters and digits only, so 'Akabenzi roti'
+    // and 'Akabenzi iroti' can be offered as a suggestion for approval.
+    const loose = (v: any) => norm(v).replace(/[^a-z0-9]/g, '');
+    const tokens = (v: any) => new Set(norm(v).split(' ').filter(Boolean));
+    const overlap = (a: Set<string>, b: Set<string>) => {
+      let hit = 0;
+      a.forEach((t) => { if (b.has(t)) hit++; });
+      return hit / Math.max(1, Math.min(a.size, b.size));
+    };
+    // Character-bigram Dice coefficient. Token overlap alone ties 'Akabenzi
+    // roti' against both 'Akabenzi iroti' and 'Akabenzi imvange'; comparing
+    // letters breaks the tie in favour of the one that is actually spelled
+    // almost the same.
+    const bigrams = (v: string) => {
+      const out = new Map<string, number>();
+      for (let i = 0; i < v.length - 1; i++) {
+        const g = v.slice(i, i + 2);
+        out.set(g, (out.get(g) || 0) + 1);
+      }
+      return out;
+    };
+    const dice = (a: string, b: string) => {
+      if (!a || !b) return 0;
+      if (a === b) return 1;
+      const A = bigrams(a), B = bigrams(b);
+      let shared = 0, sizeA = 0, sizeB = 0;
+      A.forEach((c, g) => { sizeA += c; shared += Math.min(c, B.get(g) || 0); });
+      B.forEach((c) => { sizeB += c; });
+      return (2 * shared) / Math.max(1, sizeA + sizeB);
+    };
 
     const menuItems = await dbAll<any>(
       `SELECT m.id, m.name, mc.name as category_name
@@ -375,14 +405,46 @@ menuRouter.post('/menu/link-stock', authMiddleware, requireRoles(['admin', 'mana
     // First stock row wins when several share a name; the manager can retarget
     // the link afterwards from the menu item's recipe editor.
     const stockByName = new Map<string, any>();
-    for (const s of stock) if (!stockByName.has(norm(s.name))) stockByName.set(norm(s.name), s);
+    const stockByLoose = new Map<string, any>();
+    for (const s of stock) {
+      if (!stockByName.has(norm(s.name))) stockByName.set(norm(s.name), s);
+      if (!stockByLoose.has(loose(s.name))) stockByLoose.set(loose(s.name), s);
+    }
+
+    const row = (m: any, hit: any, confidence: string) => ({
+      menu_item_id: m.id, menu_item: m.name, category: m.category_name,
+      inventory_item_id: hit.id, stock_item: hit.name, unit: hit.unit,
+      in_stock: Number(hit.current_quantity) || 0, confidence,
+    });
 
     const unlinked = menuItems.filter((m) => !linked.has(String(m.id)));
-    const matches: any[] = [];
+    const matches: any[] = [];   // identical names — safe to apply
+    const suggested: any[] = []; // near names — shown for approval, never auto-applied
     const unmatched: any[] = [];
+
     for (const m of unlinked) {
-      const hit = stockByName.get(norm(m.name));
-      if (hit) matches.push({ menu_item_id: m.id, menu_item: m.name, category: m.category_name, inventory_item_id: hit.id, stock_item: hit.name, unit: hit.unit, in_stock: Number(hit.current_quantity) || 0 });
+      const exact = stockByName.get(norm(m.name));
+      if (exact) { matches.push(row(m, exact, 'exact')); continue; }
+
+      // Same letters ignoring spacing/punctuation, e.g. 'take away' / 'takeaway'
+      const looseHit = stockByLoose.get(loose(m.name));
+      if (looseHit) { suggested.push(row(m, looseHit, 'same letters')); continue; }
+
+      // One name contains the other, or their words overlap strongly, e.g.
+      // menu 'Akabenzi roti' vs stock 'Akabenzi iroti'.
+      let best: any = null;
+      let bestScore = 0;
+      const mt = tokens(m.name);
+      for (const st of stock) {
+        const sn = norm(st.name);
+        const mn = norm(m.name);
+        const contains = sn.includes(mn) || mn.includes(sn);
+        const spelling = dice(loose(m.name), loose(st.name));
+        // Weight spelling highest, then containment, then shared words.
+        const score = Math.max(spelling, contains ? 0.9 : 0, overlap(mt, tokens(st.name)) * 0.75);
+        if (score > bestScore) { bestScore = score; best = st; }
+      }
+      if (best && bestScore >= 0.5) suggested.push({ ...row(m, best, 'similar name'), score: Number(bestScore.toFixed(2)) });
       else unmatched.push({ menu_item: m.name, category: m.category_name });
     }
 
@@ -391,13 +453,20 @@ menuRouter.post('/menu/link-stock', authMiddleware, requireRoles(['admin', 'mana
         dry_run: true,
         unlinkedCount: unlinked.length,
         matches,
+        suggested,
         unmatched,
-        message: `${matches.length} of ${unlinked.length} untracked item(s) match a stock item by name`,
+        message: `${matches.length} exact and ${suggested.length} near match(es) across ${unlinked.length} untracked item(s)`,
       });
     }
 
+    // Near matches are only ever written when the caller ticks them explicitly,
+    // and may be narrowed to a chosen subset of menu item ids.
+    const wanted: string[] | null = Array.isArray(req.body?.menu_item_ids) ? req.body.menu_item_ids.map(String) : null;
+    const toLink = [...matches, ...(req.body?.include_similar ? suggested : [])]
+      .filter((mt) => !wanted || wanted.includes(String(mt.menu_item_id)));
+
     let created = 0;
-    for (const mt of matches) {
+    for (const mt of toLink) {
       await dbRun(
         'INSERT INTO menu_item_ingredients (id, menu_item_id, inventory_item_id, quantity_required, unit) VALUES (?, ?, ?, ?, ?)',
         [`rec-link-${mt.menu_item_id}`.slice(0, 36), mt.menu_item_id, mt.inventory_item_id, perServing, mt.unit || 'units']
@@ -406,11 +475,12 @@ menuRouter.post('/menu/link-stock', authMiddleware, requireRoles(['admin', 'mana
     }
 
     await logAudit(req.user!, 'Menu', 'Link menu items to stock', null, `Linked ${created} menu item(s) at ${perServing} per serving`, req.ip);
+    const remaining = unmatched.length + (req.body?.include_similar ? 0 : suggested.length);
     return res.json({
       created,
       unmatched,
-      stillUntracked: unmatched.length,
-      message: `Linked ${created} menu item(s) to stock at ${perServing} per serving. ${unmatched.length} still need a recipe.`,
+      stillUntracked: remaining,
+      message: `Linked ${created} menu item(s) at ${perServing} per serving. ${remaining} still need a recipe.`,
     });
   } catch (e: any) {
     console.error('[Menu] link-stock failed:', e?.message || e);
