@@ -203,6 +203,9 @@ export const api = {
 
   // Link stock-untracked menu items to a same-named inventory item.
   // dry_run returns the proposed pairs without writing anything.
+  repairMenuStockLinks: (payload?: { dry_run?: boolean }) =>
+    request('/api/menu/repair-links', { method: 'POST', body: JSON.stringify(payload || {}) }),
+
   linkMenuToStock: (payload?: { dry_run?: boolean; quantity_required?: number; include_similar?: boolean; menu_item_ids?: string[] }) =>
     request('/api/menu/link-stock', { method: 'POST', body: JSON.stringify(payload || {}) }),
 

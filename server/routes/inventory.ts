@@ -338,6 +338,32 @@ inventoryRouter.delete('/inventory/items/:id', authMiddleware, requireRoles(['ad
     }
   }
 
+  // A menu item whose ingredient points at a removed stock row keeps deducting
+  // into a row nobody can see: the order looks consumed while the visible stock
+  // never moves. Refuse rather than silently orphan the recipe. `reassign_to`
+  // lets the caller move the recipes onto a replacement row in the same step.
+  const dependents = await dbAll<any>(
+    `SELECT m.id, m.name FROM menu_item_ingredients mii
+     JOIN menu_items m ON m.id = mii.menu_item_id
+     WHERE mii.inventory_item_id = ? AND m.is_active = 1`,
+    [req.params.id]
+  );
+
+  if (dependents.length > 0) {
+    const reassignTo = req.body?.reassign_to;
+    if (!reassignTo) {
+      return res.status(409).json({
+        error: `"${item.name}" is used by ${dependents.length} menu item(s). Point those recipes at another stock item first, or pass reassign_to.`,
+        dependents: dependents.map((d) => ({ id: d.id, name: d.name })),
+      });
+    }
+    const target = await dbGet<any>('SELECT id, name, unit FROM inventory_items WHERE id = ? AND is_active = 1', [reassignTo]);
+    if (!target) return res.status(404).json({ error: 'Replacement stock item not found or inactive' });
+
+    await dbRun('UPDATE menu_item_ingredients SET inventory_item_id = ?, unit = ? WHERE inventory_item_id = ?', [target.id, target.unit || 'units', req.params.id]);
+    await logAudit(req.user, 'Inventory', 'Recipes reassigned', req.params.id, `Moved ${dependents.length} recipe link(s) from ${item.name} to ${target.name}`, req.ip);
+  }
+
   await dbRun(
     'UPDATE inventory_items SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
     [req.params.id]

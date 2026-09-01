@@ -141,7 +141,7 @@ menuRouter.get('/menu/items', authMiddleware, async (req: Request, res: Response
   const enriched = await Promise.all(items.map(async (item) => {
     const ingredients = await dbAll<any>(
       `SELECT mii.*, i.name as inventory_name, i.sku, i.unit as inventory_unit,
-              i.current_quantity, i.reserved_quantity,
+              i.current_quantity, i.reserved_quantity, i.is_active as inventory_active,
               (i.current_quantity - i.reserved_quantity) as available_stock
        FROM menu_item_ingredients mii
        LEFT JOIN inventory_items i ON mii.inventory_item_id = i.id
@@ -179,9 +179,17 @@ menuRouter.get('/menu/items', authMiddleware, async (req: Request, res: Response
       displayReason = `Out of stock: ${missingIngredients.join(', ')}`;
     }
 
+    // A recipe pointing at a removed stock row deducts into something the
+    // manager cannot see, so report it rather than letting it look healthy.
+    const brokenLinks = ingredients
+      .filter((ing) => ing.inventory_name == null || Number(ing.inventory_active) === 0)
+      .map((ing) => ing.inventory_item_id);
+
     return {
       ...item,
       ingredients,
+      broken_stock_links: brokenLinks,
+      has_broken_stock_link: brokenLinks.length > 0,
       available_servings: maxServings,
       can_order: isReadyForOrdering,
       missing_ingredients: missingIngredients,
@@ -341,6 +349,62 @@ menuRouter.delete('/menu/items/:id', authMiddleware, requireRoles(['admin', 'man
 });
 
 // GET /api/menu/categories
+// POST /api/menu/repair-links - Repoint recipes that reference a removed stock
+// row onto the live row carrying the same name.
+//
+// This is the Menu/Inventory conflict in practice: replacing a stock item
+// (delete the old, create a new one with the same name) leaves the recipe
+// bound to the dead row, so orders deduct into it and the visible stock never
+// moves. Only same-name repointing is automatic; anything ambiguous is
+// reported for a human to resolve.
+menuRouter.post('/menu/repair-links', authMiddleware, requireRoles(['admin', 'manager']), async (req: Request, res: Response) => {
+  try {
+    const dryRun = !!req.body?.dry_run;
+    const norm = (v: any) => String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+
+    const broken = await dbAll<any>(
+      `SELECT mii.id as link_id, mii.menu_item_id, mii.inventory_item_id, mii.quantity_required,
+              m.name as menu_name, i.name as dead_name
+       FROM menu_item_ingredients mii
+       JOIN menu_items m ON m.id = mii.menu_item_id AND m.is_active = 1
+       LEFT JOIN inventory_items i ON i.id = mii.inventory_item_id
+       WHERE i.id IS NULL OR i.is_active = 0`
+    );
+
+    if (broken.length === 0) {
+      return res.json({ repaired: 0, unresolved: [], message: 'No broken recipe links found' });
+    }
+
+    const live = await dbAll<any>('SELECT id, name, unit, current_quantity FROM inventory_items WHERE is_active = 1');
+    const liveByName = new Map<string, any>();
+    for (const l of live) if (!liveByName.has(norm(l.name))) liveByName.set(norm(l.name), l);
+
+    const plan: any[] = [];
+    const unresolved: any[] = [];
+    for (const b of broken) {
+      const target = b.dead_name ? liveByName.get(norm(b.dead_name)) : null;
+      if (target) plan.push({ link_id: b.link_id, menu_item: b.menu_name, from: b.dead_name, to: target.name, to_id: target.id, unit: target.unit, in_stock: Number(target.current_quantity) || 0 });
+      else unresolved.push({ menu_item: b.menu_name, missing_stock: b.dead_name || '(deleted row)' });
+    }
+
+    if (dryRun) {
+      return res.json({ dry_run: true, plan, unresolved, message: `${plan.length} link(s) can be repointed, ${unresolved.length} need a manual recipe` });
+    }
+
+    let repaired = 0;
+    for (const pl of plan) {
+      await dbRun('UPDATE menu_item_ingredients SET inventory_item_id = ?, unit = ? WHERE id = ?', [pl.to_id, pl.unit || 'units', pl.link_id]);
+      repaired++;
+    }
+
+    await logAudit(req.user!, 'Menu', 'Repair recipe links', null, `Repointed ${repaired} recipe link(s) onto live stock rows`, req.ip);
+    return res.json({ repaired, unresolved, message: `Repointed ${repaired} recipe link(s). ${unresolved.length} still need attention.` });
+  } catch (e: any) {
+    console.error('[Menu] repair-links failed:', e?.message || e);
+    return res.status(500).json({ error: e?.message || 'Failed to repair recipe links' });
+  }
+});
+
 // POST /api/menu/link-stock - Link menu items that have NO recipe to a stock
 // item of the same name, so ordering them actually deducts stock.
 //

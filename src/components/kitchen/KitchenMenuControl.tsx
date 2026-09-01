@@ -65,6 +65,7 @@ export const KitchenMenuControl: React.FC = () => {
   const [linkQty, setLinkQty] = useState('1');
   const [linking, setLinking] = useState(false);
   const [acceptedSuggestions, setAcceptedSuggestions] = useState<string[]>([]);
+  const [repairing, setRepairing] = useState(false);
 
   const fetchMenuItems = async () => {
     try {
@@ -251,6 +252,21 @@ export const KitchenMenuControl: React.FC = () => {
   const canImportDrinks = user?.role === 'admin' || user?.role === 'manager';
 
   const untrackedCount = menuItems.filter((m: any) => !(m.ingredients && m.ingredients.length)).length;
+  // A recipe bound to a removed stock row deducts where nobody can see it.
+  const brokenLinkCount = menuItems.filter((m: any) => m.has_broken_stock_link).length;
+
+  const handleRepairLinks = async () => {
+    setRepairing(true);
+    try {
+      const res: any = await api.repairMenuStockLinks({});
+      success('Recipe links repaired', res.message);
+      fetchMenuItems();
+    } catch (err: any) {
+      error('Repair failed', err.message);
+    } finally {
+      setRepairing(false);
+    }
+  };
 
   const handleOpenLinkStock = async () => {
     setLinkQty('1');
@@ -347,6 +363,17 @@ export const KitchenMenuControl: React.FC = () => {
           >
             <Plus className="w-3.5 h-3.5" /> New Menu Item
           </button>
+          {canImportDrinks && brokenLinkCount > 0 && (
+            <button
+              onClick={handleRepairLinks}
+              disabled={repairing}
+              className="px-3.5 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 disabled:opacity-50"
+              title="Some recipes point at stock items that were removed — repoint them at the live rows"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" />
+              {repairing ? 'Repairing...' : `Fix Broken Links (${brokenLinkCount})`}
+            </button>
+          )}
           {canImportDrinks && untrackedCount > 0 && (
             <button
               onClick={handleOpenLinkStock}
@@ -470,6 +497,12 @@ export const KitchenMenuControl: React.FC = () => {
                         </span>
                       </div>
                     ))}
+                    {item.has_broken_stock_link && (
+                      <p className="text-[10px] text-rose-300 font-semibold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                        Linked stock item was removed — deductions go nowhere visible
+                      </p>
+                    )}
                     {(!item.ingredients || item.ingredients.length === 0) && (
                       <p className="text-[10px] text-amber-300/90 font-semibold flex items-center gap-1">
                         <AlertTriangle className="w-3 h-3 shrink-0" />
@@ -704,9 +737,43 @@ export const KitchenMenuControl: React.FC = () => {
                 </div>
 
                 {ingredientRows.length === 0 && (
-                  <p className="text-[10px] text-slate-500 italic mb-2">
-                    No ingredients linked yet — the dish can still be created.
+                  <p className="text-[10px] text-amber-300/90 font-semibold mb-2 flex items-start gap-1.5">
+                    <AlertTriangle className="w-3 h-3 shrink-0 mt-0.5" />
+                    <span>
+                      No ingredients yet. The dish can still be saved, but ordering it will
+                      <strong className="text-amber-200"> not deduct any stock</strong> and it will show a
+                      placeholder 50 servings. Add each ingredient and how much one serving uses.
+                    </span>
                   </p>
+                )}
+
+                {ingredientRows.some((r) => r.inventory_item_id) && (
+                  <div className="mb-2 p-2.5 rounded-lg bg-slate-950/60 border border-slate-800">
+                    <p className="text-[10px] font-bold text-slate-300 uppercase tracking-wider mb-1">
+                      One serving consumes
+                    </p>
+                    <div className="space-y-0.5">
+                      {ingredientRows.filter((r) => r.inventory_item_id).map((r, i) => {
+                        const inv: any = inventoryItems.find((x: any) => x.id === r.inventory_item_id);
+                        const per = parseFloat(r.quantity_required || '0') || 0;
+                        const have = Number(inv?.available_quantity ?? inv?.current_quantity ?? 0);
+                        const servings = per > 0 ? Math.floor(have / per) : 0;
+                        return (
+                          <div key={i} className="flex items-center justify-between text-[10px]">
+                            <span className="text-slate-400 truncate">
+                              {per} {r.unit || inv?.unit || 'units'} of <span className="text-white font-semibold">{inv?.name || '—'}</span>
+                            </span>
+                            <span className={`font-mono font-bold shrink-0 ${servings === 0 ? 'text-rose-400' : 'text-slate-300'}`}>
+                              {have} in stock &rarr; {servings} serving{servings === 1 ? '' : 's'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[9px] text-slate-500 mt-1.5">
+                      Availability follows the scarcest ingredient, and each is deducted from its own stock item on completion.
+                    </p>
+                  </div>
                 )}
 
                 <div className="space-y-2">
