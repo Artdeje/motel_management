@@ -29,6 +29,7 @@ import {
   Wrench,
   ClipboardList,
   Lock,
+  X,
 } from 'lucide-react';
 import { formatCurrency, CURRENCY_SYMBOL } from '../../utils/currency';
 import { formatDateTimeCAT } from '../../utils/dates';
@@ -67,6 +68,9 @@ export const InventoryManager: React.FC = () => {
   const [stockRequests, setStockRequests] = useState<StockRequest[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  // Global search: works from any tab so an item can be found without
+  // switching to the list and scrolling.
+  const [globalSearch, setGlobalSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [selectedLabel, setSelectedLabel] = useState('all');
@@ -375,6 +379,31 @@ export const InventoryManager: React.FC = () => {
     if (user?.role === 'housekeeper' && it.department === 'Housekeeping') return true;
     return false;
   };
+  // Matches across every field someone might recall: name, SKU, category,
+  // department, stock label and storage location.
+  const globalMatches = (() => {
+    const q = globalSearch.trim().toLowerCase();
+    if (!q) return [];
+    return items
+      .filter((it) =>
+        [it.name, it.sku, it.category_name, it.department, it.stock_label, it.storage_location]
+          .filter(Boolean)
+          .some((f: any) => String(f).toLowerCase().includes(q))
+      )
+      .slice(0, 40);
+  })();
+
+  const jumpToItem = (it: any) => {
+    // Send the user to the full list already filtered down to this item.
+    setActiveTab('items');
+    setSearchQuery(it.sku || it.name);
+    setSelectedDepartment('all');
+    setSelectedCategory('all');
+    setSelectedLabel('all');
+    setStockListPeriod('all');
+    setGlobalSearch('');
+  };
+
   const visibleCategories = categories.filter(c => ['Drink','Kitchen ingredient','Tools'].includes(c.name));
 
   const handleDownloadPDF = () => {
@@ -447,6 +476,81 @@ export const InventoryManager: React.FC = () => {
             <Plus className="w-3.5 h-3.5"/> <span className="hidden sm:inline">Request Stock</span><span className="sm:hidden">Request</span>
           </button>
         </div>
+      </div>
+
+      {/* GLOBAL SEARCH - available from every tab, results without scrolling */}
+      <div className="relative">
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={globalSearch}
+            onChange={(e) => setGlobalSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Escape') setGlobalSearch(''); }}
+            placeholder="Search all stock — name, SKU, category, department or location..."
+            className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-10 pr-24 py-2.5 lg:py-3 text-xs lg:text-sm text-white placeholder:text-slate-500 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 transition-all"
+          />
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+            {globalSearch && (
+              <>
+                <span className="text-[11px] font-bold text-slate-400 whitespace-nowrap">
+                  {globalMatches.length} match{globalMatches.length === 1 ? '' : 'es'}
+                </span>
+                <button
+                  onClick={() => setGlobalSearch('')}
+                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                  title="Clear (Esc)"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {globalSearch.trim() && (
+          <div className="absolute z-40 mt-2 w-full max-h-[26rem] overflow-y-auto rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl pos-scroll">
+            {globalMatches.length === 0 ? (
+              <div className="p-6 text-center">
+                <Boxes className="w-7 h-7 text-slate-600 mx-auto mb-2" />
+                <p className="text-xs font-semibold text-slate-300">No stock matches "{globalSearch.trim()}"</p>
+                <p className="text-[11px] text-slate-500 mt-1">Try part of the name, the SKU, or a department.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-800">
+                {globalMatches.map((it: any) => {
+                  const avail = Number(it.available_quantity) || 0;
+                  const min = Number(it.minimum_quantity) || 0;
+                  const tone = avail <= 0 ? 'text-rose-400' : avail <= min ? 'text-amber-400' : 'text-emerald-400';
+                  return (
+                    <div key={it.id} className="flex items-center gap-3 p-3 hover:bg-slate-800/60 transition-colors">
+                      <button onClick={() => jumpToItem(it)} className="flex-1 min-w-0 text-left">
+                        <p className="text-[13px] font-bold text-white truncate">{it.name}</p>
+                        <p className="text-[11px] text-slate-500 truncate">
+                          {it.sku} &bull; {it.category_name} &bull; {it.department || 'General'}
+                          {it.storage_location ? ` • ${it.storage_location}` : ''}
+                        </p>
+                      </button>
+                      <div className="text-right shrink-0">
+                        <p className={`text-[13px] font-black font-mono ${tone}`}>{avail} {it.unit}</p>
+                        <p className="text-[10px] text-slate-500">{it.stock_label}</p>
+                      </div>
+                      {canReceiveStock(it) && (
+                        <button
+                          onClick={() => { setGlobalSearch(''); handleOpenAdjust(it); }}
+                          className="shrink-0 px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] rounded-lg"
+                          title="Refill this item"
+                        >
+                          Refill
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Tabs Row - Desktop: no scroll, wrap; Mobile: horizontal scroll */}

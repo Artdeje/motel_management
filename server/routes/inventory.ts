@@ -287,9 +287,31 @@ inventoryRouter.put('/inventory/items/:id', authMiddleware, requireRoles(['admin
     }
   }
 
+  // Treat this as a partial update: any field the caller omits keeps its current
+  // value. Previously `is_active ? 1 : 0` turned an omitted flag into 0, so the
+  // edit form — which never sends is_active — silently soft-deleted the item and
+  // it vanished from the list.
+  const keepNumber = (v: any, fallback: any) => {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : Number(fallback) || 0;
+  };
+  const nextActive = is_active === undefined || is_active === null ? (item.is_active ?? 1) : (is_active ? 1 : 0);
+
   await dbRun(
     `UPDATE inventory_items SET name = ?, category_id = ?, department = ?, unit = ?, minimum_quantity = ?, reorder_quantity = ?, unit_cost = ?, supplier_id = ?, storage_location = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-    [name, category_id, department || item.department || 'General', unit, parseFloat(minimum_quantity), parseFloat(reorder_quantity), parseFloat(unit_cost), supplier_id || null, storage_location || null, is_active ? 1 : 0, req.params.id]
+    [
+      name ?? item.name,
+      category_id ?? item.category_id,
+      department || item.department || 'General',
+      unit ?? item.unit,
+      keepNumber(minimum_quantity, item.minimum_quantity),
+      keepNumber(reorder_quantity, item.reorder_quantity),
+      keepNumber(unit_cost, item.unit_cost),
+      supplier_id === undefined ? item.supplier_id : (supplier_id || null),
+      storage_location === undefined ? item.storage_location : (storage_location || null),
+      nextActive,
+      req.params.id,
+    ]
   );
 
   await logAudit(req.user, 'Inventory', 'Updated', req.params.id, `Updated item ${item.sku} properties`);
