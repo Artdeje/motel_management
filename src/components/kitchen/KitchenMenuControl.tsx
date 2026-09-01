@@ -59,6 +59,12 @@ export const KitchenMenuControl: React.FC = () => {
   const [repriceExisting, setRepriceExisting] = useState(false);
   const [importing, setImporting] = useState(false);
 
+  // Link stock-untracked menu items to same-named stock (preview first)
+  const [showLinkModal, setShowLinkModal] = useState(false);
+  const [linkPreview, setLinkPreview] = useState<any>(null);
+  const [linkQty, setLinkQty] = useState('1');
+  const [linking, setLinking] = useState(false);
+
   const fetchMenuItems = async () => {
     try {
       setLoading(true);
@@ -243,6 +249,40 @@ export const KitchenMenuControl: React.FC = () => {
   // Importing bar stock into the menu is a pricing decision — managers and admins only.
   const canImportDrinks = user?.role === 'admin' || user?.role === 'manager';
 
+  const untrackedCount = menuItems.filter((m: any) => !(m.ingredients && m.ingredients.length)).length;
+
+  const handleOpenLinkStock = async () => {
+    setLinkQty('1');
+    setLinkPreview(null);
+    setShowLinkModal(true);
+    setLinking(true);
+    try {
+      const res: any = await api.linkMenuToStock({ dry_run: true });
+      setLinkPreview(res);
+    } catch (err: any) {
+      error('Could not build preview', err.message);
+      setShowLinkModal(false);
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  const handleConfirmLinkStock = async () => {
+    const q = parseFloat(linkQty);
+    if (!Number.isFinite(q) || q <= 0) return error('Invalid quantity', 'Enter a quantity greater than zero');
+    setLinking(true);
+    try {
+      const res: any = await api.linkMenuToStock({ quantity_required: q });
+      success('Menu linked to stock', res.message);
+      setShowLinkModal(false);
+      fetchMenuItems();
+    } catch (err: any) {
+      error('Linking failed', err.message);
+    } finally {
+      setLinking(false);
+    }
+  };
+
   const handleImportDrinks = async (e: React.FormEvent) => {
     e.preventDefault();
     const markup = parseFloat(importMarkup);
@@ -299,6 +339,15 @@ export const KitchenMenuControl: React.FC = () => {
           >
             <Plus className="w-3.5 h-3.5" /> New Menu Item
           </button>
+          {canImportDrinks && untrackedCount > 0 && (
+            <button
+              onClick={handleOpenLinkStock}
+              className="px-3.5 py-2 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-transform active:scale-95"
+              title="Link menu items that do not deduct stock to a matching stock item"
+            >
+              <Layers className="w-3.5 h-3.5" /> Link Stock ({untrackedCount})
+            </button>
+          )}
           {canImportDrinks && (
             <button
               onClick={() => setShowImportModal(true)}
@@ -414,7 +463,10 @@ export const KitchenMenuControl: React.FC = () => {
                       </div>
                     ))}
                     {(!item.ingredients || item.ingredients.length === 0) && (
-                      <p className="text-[10px] text-slate-400 italic">No inventory recipe linked.</p>
+                      <p className="text-[10px] text-amber-300/90 font-semibold flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                        No recipe — ordering this does not deduct stock
+                      </p>
                     )}
                   </div>
                 </div>
@@ -832,6 +884,95 @@ export const KitchenMenuControl: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Link stock-untracked menu items — preview before writing anything */}
+      {showLinkModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Layers className="w-5 h-5 text-violet-400" /> Link Menu Items To Stock
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Items with no recipe never deduct stock when ordered — they show a flat 50 servings.
+              This links only items whose name already matches a stock item exactly.
+            </p>
+
+            {linking && !linkPreview && (
+              <p className="text-xs text-slate-400 py-8 text-center">Building preview...</p>
+            )}
+
+            {linkPreview && (
+              <>
+                <div className="mt-4">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Stock used per serving</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={linkQty}
+                    onChange={(e) => setLinkQty(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-sm font-mono text-white"
+                  />
+                  <p className="text-[10px] text-slate-500 mt-1">
+                    Applied to every link below. Adjust any individual recipe afterwards by editing the menu item.
+                  </p>
+                </div>
+
+                <div className="mt-4 rounded-xl border border-emerald-500/25 bg-emerald-500/5 overflow-hidden">
+                  <p className="text-[11px] font-bold text-emerald-300 uppercase tracking-wider px-3 py-2 border-b border-emerald-500/20">
+                    Will link ({linkPreview.matches?.length || 0})
+                  </p>
+                  <div className="max-h-48 overflow-y-auto divide-y divide-slate-800">
+                    {(linkPreview.matches || []).map((m: any) => (
+                      <div key={m.menu_item_id} className="flex items-center justify-between gap-2 px-3 py-2">
+                        <span className="text-[11px] text-white font-semibold truncate">{m.menu_item}</span>
+                        <span className="text-[10px] text-slate-400 shrink-0">
+                          &rarr; {m.stock_item} <span className="font-mono">({m.in_stock} {m.unit})</span>
+                        </span>
+                      </div>
+                    ))}
+                    {(linkPreview.matches || []).length === 0 && (
+                      <p className="px-3 py-3 text-[11px] text-slate-500">No exact name matches found.</p>
+                    )}
+                  </div>
+                </div>
+
+                {(linkPreview.unmatched || []).length > 0 && (
+                  <div className="mt-3 rounded-xl border border-amber-500/25 bg-amber-500/5 overflow-hidden">
+                    <p className="text-[11px] font-bold text-amber-300 uppercase tracking-wider px-3 py-2 border-b border-amber-500/20">
+                      Still untracked ({linkPreview.unmatched.length}) — set a recipe by hand
+                    </p>
+                    <div className="max-h-32 overflow-y-auto px-3 py-2">
+                      <p className="text-[11px] text-slate-400 leading-relaxed">
+                        {linkPreview.unmatched.map((u: any) => u.menu_item).join(', ')}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowLinkModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLinkStock}
+                disabled={linking || !linkPreview || (linkPreview.matches || []).length === 0}
+                className="px-5 py-2 bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs rounded-xl shadow disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                {linking ? 'Linking...' : `Link ${(linkPreview?.matches || []).length} Item(s)`}
+              </button>
+            </div>
           </div>
         </div>
       )}

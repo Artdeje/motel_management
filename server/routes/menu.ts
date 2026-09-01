@@ -341,6 +341,83 @@ menuRouter.delete('/menu/items/:id', authMiddleware, requireRoles(['admin', 'man
 });
 
 // GET /api/menu/categories
+// POST /api/menu/link-stock - Link menu items that have NO recipe to a stock
+// item of the same name, so ordering them actually deducts stock.
+//
+// A menu item without ingredients reports a flat 50 servings and consumes
+// nothing on completion — that is why kitchen stock never moved. Recipes are
+// business data, so this never guesses quantities beyond 1 unit per serving and
+// never invents a match: it only pairs names that are already identical, and
+// `dry_run` returns the proposed pairs for a human to approve first.
+menuRouter.post('/menu/link-stock', authMiddleware, requireRoles(['admin', 'manager']), async (req: Request, res: Response) => {
+  try {
+    const dryRun = !!req.body?.dry_run;
+    const qtyRaw = req.body?.quantity_required;
+    const perServing = qtyRaw === undefined || qtyRaw === null || qtyRaw === '' ? 1 : parseFloat(qtyRaw);
+    if (!Number.isFinite(perServing) || perServing <= 0) {
+      return res.status(400).json({ error: 'Quantity per serving must be greater than zero' });
+    }
+
+    const norm = (v: any) => String(v || '').trim().toLowerCase();
+
+    const menuItems = await dbAll<any>(
+      `SELECT m.id, m.name, mc.name as category_name
+       FROM menu_items m JOIN menu_categories mc ON m.category_id = mc.id
+       WHERE m.is_active = 1`
+    );
+    const linked = new Set(
+      (await dbAll<any>('SELECT DISTINCT menu_item_id FROM menu_item_ingredients')).map((r) => String(r.menu_item_id))
+    );
+    const stock = await dbAll<any>(
+      'SELECT id, name, unit, current_quantity FROM inventory_items WHERE is_active = 1'
+    );
+
+    // First stock row wins when several share a name; the manager can retarget
+    // the link afterwards from the menu item's recipe editor.
+    const stockByName = new Map<string, any>();
+    for (const s of stock) if (!stockByName.has(norm(s.name))) stockByName.set(norm(s.name), s);
+
+    const unlinked = menuItems.filter((m) => !linked.has(String(m.id)));
+    const matches: any[] = [];
+    const unmatched: any[] = [];
+    for (const m of unlinked) {
+      const hit = stockByName.get(norm(m.name));
+      if (hit) matches.push({ menu_item_id: m.id, menu_item: m.name, category: m.category_name, inventory_item_id: hit.id, stock_item: hit.name, unit: hit.unit, in_stock: Number(hit.current_quantity) || 0 });
+      else unmatched.push({ menu_item: m.name, category: m.category_name });
+    }
+
+    if (dryRun) {
+      return res.json({
+        dry_run: true,
+        unlinkedCount: unlinked.length,
+        matches,
+        unmatched,
+        message: `${matches.length} of ${unlinked.length} untracked item(s) match a stock item by name`,
+      });
+    }
+
+    let created = 0;
+    for (const mt of matches) {
+      await dbRun(
+        'INSERT INTO menu_item_ingredients (id, menu_item_id, inventory_item_id, quantity_required, unit) VALUES (?, ?, ?, ?, ?)',
+        [`rec-link-${mt.menu_item_id}`.slice(0, 36), mt.menu_item_id, mt.inventory_item_id, perServing, mt.unit || 'units']
+      );
+      created++;
+    }
+
+    await logAudit(req.user!, 'Menu', 'Link menu items to stock', null, `Linked ${created} menu item(s) at ${perServing} per serving`, req.ip);
+    return res.json({
+      created,
+      unmatched,
+      stillUntracked: unmatched.length,
+      message: `Linked ${created} menu item(s) to stock at ${perServing} per serving. ${unmatched.length} still need a recipe.`,
+    });
+  } catch (e: any) {
+    console.error('[Menu] link-stock failed:', e?.message || e);
+    return res.status(500).json({ error: e?.message || 'Failed to link menu items to stock' });
+  }
+});
+
 // POST /api/menu/sync-drinks - Manually publish all Drink stock to Drinks & Bar.
 // Runs automatically on every menu load; this endpoint is for an explicit
 // "sync now" action and reports what it did.

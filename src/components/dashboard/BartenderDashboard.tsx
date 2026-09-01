@@ -113,7 +113,25 @@ export const BartenderDashboard: React.FC<BartenderDashboardProps> = ({ onNaviga
         api.getOrders({ waiter_id: user?.id }),
         api.getMenuItems(),
       ]);
-      setOrders(ordRes.orders || []);
+      // Postgres returns money and quantity columns as STRINGS. Summing them
+      // raw concatenates instead of adding ("0" + "1500.00" -> "01500.00"),
+      // which made the revenue figure a long digit string rather than a total.
+      // Normalise once here so every calculation below is arithmetic.
+      const num = (v: any) => Number(v) || 0;
+      const normalisedOrders = (ordRes.orders || []).map((o: any) => ({
+        ...o,
+        subtotal: num(o.subtotal),
+        discount: num(o.discount),
+        total_amount: num(o.total_amount),
+        items: (o.items || []).map((it: any) => ({
+          ...it,
+          quantity: num(it.quantity),
+          unit_price: num(it.unit_price),
+          total_price: num(it.total_price),
+        })),
+      }));
+
+      setOrders(normalisedOrders);
       setMenuItems(menuRes.items || []);
 
       // Calculate daily stats from orders
@@ -130,7 +148,7 @@ export const BartenderDashboard: React.FC<BartenderDashboardProps> = ({ onNaviga
       let revenue = 0;
 
       // Filter orders by period
-      let filteredOrders = [...ordRes.orders];
+      let filteredOrders = [...normalisedOrders];
 
       if (period === 'custom' && customStart && customEnd) {
         const startD = new Date(customStart);

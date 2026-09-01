@@ -201,6 +201,11 @@ export const api = {
   syncDrinksToMenu: (payload?: { markup_percent?: number; reprice_existing?: boolean }) =>
     request('/api/menu/sync-drinks', { method: 'POST', body: JSON.stringify(payload || {}) }),
 
+  // Link stock-untracked menu items to a same-named inventory item.
+  // dry_run returns the proposed pairs without writing anything.
+  linkMenuToStock: (payload?: { dry_run?: boolean; quantity_required?: number }) =>
+    request('/api/menu/link-stock', { method: 'POST', body: JSON.stringify(payload || {}) }),
+
   // Debtors — unpaid tabs recorded at the bar
   getDebtors: (status?: string) => request(`/api/debtors${status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : ''}`),
   createDebtor: (debt: any) => request('/api/debtors', { method: 'POST', body: JSON.stringify(debt) }),
