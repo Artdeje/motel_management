@@ -218,9 +218,10 @@ export const InventoryManager: React.FC = () => {
   const handleOpenAddItem = () => {
     setEditingItem(null);
     setItemForm({
-      sku: generateSku(categories[0]?.id || ''),
+      // Default to a category that actually appears in the dropdown.
+      sku: generateSku(visibleCategories[0]?.id || categories[0]?.id || ''),
       name: '',
-      category_id: categories[0]?.id || '',
+      category_id: visibleCategories[0]?.id || categories[0]?.id || '',
       department: 'General',
       unit: 'units',
       current_quantity: '0',
@@ -405,6 +406,19 @@ export const InventoryManager: React.FC = () => {
   };
 
   const visibleCategories = categories.filter(c => ['Drink','Kitchen ingredient','Tools'].includes(c.name));
+
+  // The category <select> is `required` but only lists the three curated
+  // categories. Editing an item filed under any other category (58 of the Bar
+  // items here) left it with no matching option, so the browser treated the
+  // field as empty and silently refused to submit — the Save button simply did
+  // nothing. Always offer the item's own category so an edit can be saved,
+  // while new items still default to the curated list.
+  const categoryOptions = (() => {
+    const list = [...visibleCategories];
+    const current = categories.find((c: any) => c.id === itemForm.category_id);
+    if (current && !list.some((c: any) => c.id === current.id)) list.push(current);
+    return list;
+  })();
 
   const handleDownloadPDF = () => {
     const el = document.getElementById('inventory-analytics-printable');
@@ -1032,7 +1046,7 @@ export const InventoryManager: React.FC = () => {
               </div>
               <div><label className="block text-xs font-semibold text-slate-300 mb-1">Item Name</label><input type="text" placeholder="e.g. Fresh Chicken Breast" value={itemForm.name} onChange={(e) => setItemForm({ ...itemForm, name: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" required/></div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div><label className="block text-xs font-semibold text-slate-300 mb-1">Category * (Drink / Food / Kitchen ingredient / Tools)</label><select value={itemForm.category_id} onChange={(e) => setItemForm({ ...itemForm, category_id: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" required>{visibleCategories.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}</select></div>
+                <div><label className="block text-xs font-semibold text-slate-300 mb-1">Category *</label><select value={itemForm.category_id} onChange={(e) => setItemForm({ ...itemForm, category_id: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" required><option value="">Select a category...</option>{categoryOptions.map((c) => (<option key={c.id} value={c.id}>{c.name}{visibleCategories.some((v:any)=>v.id===c.id) ? '' : ' (current)'}</option>))}</select></div>
                 <div><label className="block text-xs font-semibold text-slate-300 mb-1">Department</label><select value={itemForm.department} onChange={(e) => setItemForm({ ...itemForm, department: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white" required><option value="Kitchen">Kitchen</option><option value="Bar">Bar</option><option value="Housekeeping">Housekeeping</option><option value="Manager">Manager</option><option value="General">General</option></select></div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
