@@ -517,6 +517,25 @@ CREATE TABLE IF NOT EXISTS restaurant_tables (
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+-- DEBTORS: unpaid tabs recorded at the bar and settled later.
+-- Kept out of `payments` on purpose: an outstanding debt is not revenue, only
+-- the amounts actually collected are written into payments.
+CREATE TABLE IF NOT EXISTS debtors (
+    id VARCHAR(36) PRIMARY KEY,
+    debtor_name VARCHAR(150) NOT NULL,
+    phone VARCHAR(30),
+    order_id VARCHAR(36),
+    amount DECIMAL(10, 2) NOT NULL,
+    amount_paid DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    reason TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'Outstanding', -- 'Outstanding', 'Settled'
+    recorded_by VARCHAR(36) NOT NULL,
+    settled_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recorded_by) REFERENCES users(id)
+);
+
 -- INDEXES FOR MAXIMUM QUERY PERFORMANCE
 CREATE INDEX IF NOT EXISTS idx_rooms_status ON rooms(status);
 CREATE INDEX IF NOT EXISTS idx_reservations_dates ON reservations(check_in_date, check_out_date, status);
@@ -528,3 +547,5 @@ CREATE INDEX IF NOT EXISTS idx_orders_date ON orders(created_at);
 CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
 CREATE INDEX IF NOT EXISTS idx_audit_module ON audit_logs(module, created_at);
 
+CREATE INDEX IF NOT EXISTS idx_debtors_status ON debtors(status);
+CREATE INDEX IF NOT EXISTS idx_debtors_recorded_by ON debtors(recorded_by);

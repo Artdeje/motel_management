@@ -114,6 +114,8 @@ ordersRouter.post('/orders', authMiddleware, requireRoles(['admin', 'manager', '
       let subtotal = 0;
       const orderItemsToInsert: any[] = [];
       const inventoryReservations: { invId: string; qty: number; invName: string }[] = [];
+      // Running demand per stock item for the whole order (see the check below).
+      const demandByInventory = new Map<string, { need: number; name: string }>();
 
       // 1. Validate every menu item & its ingredients stock
       for (const cartItem of items) {
@@ -132,18 +134,37 @@ ordersRouter.post('/orders', authMiddleware, requireRoles(['admin', 'manager', '
         }
 
         const ingredients = await dbAll<any>(
-          'SELECT mii.*, i.name as inv_name, i.current_quantity, i.reserved_quantity FROM menu_item_ingredients mii JOIN inventory_items i ON mii.inventory_item_id = i.id WHERE mii.menu_item_id = ?',
+          'SELECT mii.*, i.name as inv_name, i.is_active as inv_active, i.current_quantity, i.reserved_quantity FROM menu_item_ingredients mii JOIN inventory_items i ON mii.inventory_item_id = i.id WHERE mii.menu_item_id = ?',
           [menuItem.id]
         );
 
         for (const ing of ingredients) {
-          const availStock = ing.current_quantity - ing.reserved_quantity;
-          const requiredTotal = ing.quantity_required * quantity;
-
-          if (availStock < requiredTotal) {
-            const possibleServings = Math.floor(availStock / ing.quantity_required);
+          // Selling against a removed stock row would deduct where nobody can
+          // see it, so treat that as unsellable rather than silently allowing it.
+          if (Number(ing.inv_active) === 0) {
             throw new Error(
-              `Insufficient stock for "${menuItem.name}". Requested ${quantity} serving(s), but only ${Math.max(0, possibleServings)} available due to limited ${ing.inv_name} stock (${availStock} remaining).`
+              `"${menuItem.name}" cannot be sold: its stock item "${ing.inv_name}" has been removed from inventory. Point the recipe at a live stock item first.`
+            );
+          }
+
+          const availStock = Number(ing.current_quantity) - Number(ing.reserved_quantity);
+          const perServing = Number(ing.quantity_required) || 0;
+          const requiredTotal = perServing * quantity;
+
+          // Accumulate demand per stock item across the WHOLE order. Reservations
+          // are only written after this loop, so checking each line on its own let
+          // two lines that draw on the same stock item each pass while together
+          // exceeding it — two servings of the same dish, or two different dishes
+          // sharing an ingredient.
+          const prior = demandByInventory.get(ing.inventory_item_id)?.need || 0;
+          const cumulative = prior + requiredTotal;
+          demandByInventory.set(ing.inventory_item_id, { need: cumulative, name: ing.inv_name });
+
+          if (availStock < cumulative) {
+            const possibleServings = perServing > 0 ? Math.floor((availStock - prior) / perServing) : 0;
+            const alsoNeeded = prior > 0 ? ` (${prior} already needed by other items on this order)` : '';
+            throw new Error(
+              `Insufficient stock for "${menuItem.name}". Requested ${quantity} serving(s), but only ${Math.max(0, possibleServings)} can be made from the remaining ${ing.inv_name} stock (${availStock} available${alsoNeeded}).`
             );
           }
 
@@ -292,6 +313,10 @@ ordersRouter.put('/orders/:id', authMiddleware, requireRoles(['admin', 'manager'
       let newSubtotal = 0;
       const newOrderItemsToInsert: any[] = [];
       const newInventoryReservations: { invId: string; qty: number; invName: string }[] = [];
+      // Same cumulative guard as order creation: reservations are written after
+      // this loop, so per-line checks alone would let one order oversell a stock
+      // item shared by several of its lines.
+      const editDemandByInventory = new Map<string, { need: number; name: string }>();
 
       for (const cartItem of items) {
         const menuItem = await dbGet<any>('SELECT * FROM menu_items WHERE id = ?', [cartItem.menu_item_id]);
@@ -309,18 +334,30 @@ ordersRouter.put('/orders/:id', authMiddleware, requireRoles(['admin', 'manager'
         }
 
         const ingredients = await dbAll<any>(
-          'SELECT mii.*, i.name as inv_name, i.current_quantity, i.reserved_quantity FROM menu_item_ingredients mii JOIN inventory_items i ON mii.inventory_item_id = i.id WHERE mii.menu_item_id = ?',
+          'SELECT mii.*, i.name as inv_name, i.is_active as inv_active, i.current_quantity, i.reserved_quantity FROM menu_item_ingredients mii JOIN inventory_items i ON mii.inventory_item_id = i.id WHERE mii.menu_item_id = ?',
           [menuItem.id]
         );
 
         for (const ing of ingredients) {
-          const availStock = ing.current_quantity - ing.reserved_quantity;
-          const requiredTotal = ing.quantity_required * quantity;
-
-          if (availStock < requiredTotal) {
-            const possibleServings = Math.floor(availStock / ing.quantity_required);
+          if (Number(ing.inv_active) === 0) {
             throw new Error(
-              `Insufficient stock for "${menuItem.name}". Requested ${quantity} serving(s), but only ${Math.max(0, possibleServings)} available due to limited ${ing.inv_name} stock (${availStock} remaining).`
+              `"${menuItem.name}" cannot be sold: its stock item "${ing.inv_name}" has been removed from inventory. Point the recipe at a live stock item first.`
+            );
+          }
+
+          const availStock = Number(ing.current_quantity) - Number(ing.reserved_quantity);
+          const perServing = Number(ing.quantity_required) || 0;
+          const requiredTotal = perServing * quantity;
+
+          const prior = editDemandByInventory.get(ing.inventory_item_id)?.need || 0;
+          const cumulative = prior + requiredTotal;
+          editDemandByInventory.set(ing.inventory_item_id, { need: cumulative, name: ing.inv_name });
+
+          if (availStock < cumulative) {
+            const possibleServings = perServing > 0 ? Math.floor((availStock - prior) / perServing) : 0;
+            const alsoNeeded = prior > 0 ? ` (${prior} already needed by other items on this order)` : '';
+            throw new Error(
+              `Insufficient stock for "${menuItem.name}". Requested ${quantity} serving(s), but only ${Math.max(0, possibleServings)} can be made from the remaining ${ing.inv_name} stock (${availStock} available${alsoNeeded}).`
             );
           }
 

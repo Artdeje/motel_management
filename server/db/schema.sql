@@ -493,6 +493,25 @@ CREATE TABLE IF NOT EXISTS token_blacklist (
     reason VARCHAR(100) NOT NULL DEFAULT 'Logout'
 );
 
+-- DEBTORS: unpaid tabs recorded at the bar and settled later.
+-- Kept out of `payments` on purpose: an outstanding debt is not revenue, only
+-- the amounts actually collected are written into payments.
+CREATE TABLE IF NOT EXISTS debtors (
+    id VARCHAR(36) PRIMARY KEY,
+    debtor_name VARCHAR(150) NOT NULL,
+    phone VARCHAR(30),
+    order_id VARCHAR(36),
+    amount DECIMAL(10, 2) NOT NULL,
+    amount_paid DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+    reason TEXT,
+    status VARCHAR(20) NOT NULL DEFAULT 'Outstanding', -- 'Outstanding', 'Settled'
+    recorded_by VARCHAR(36) NOT NULL,
+    settled_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recorded_by) REFERENCES users(id)
+);
+
 -- INDEXES FOR MAXIMUM QUERY PERFORMANCE
 CREATE INDEX idx_rooms_status ON rooms(status);
 CREATE INDEX idx_reservations_dates ON reservations(check_in_date, check_out_date, status);
@@ -503,3 +522,4 @@ CREATE INDEX idx_orders_status ON orders(status, waiter_id);
 CREATE INDEX idx_orders_date ON orders(created_at);
 CREATE INDEX idx_invoices_status ON invoices(status);
 CREATE INDEX idx_audit_module ON audit_logs(module, created_at);
+CREATE INDEX idx_debtors_status ON debtors(status);
