@@ -4,6 +4,38 @@ import { authMiddleware, logAudit, requireRoles, createNotification } from '../m
 
 export const ordersRouter = Router();
 
+/**
+ * Put back the stock an order already took off the shelf.
+ *
+ * Ingredients are consumed the moment an order is raised, so anything that
+ * undoes the order — cancelling it, or deleting one that never went out —
+ * has to hand the quantity back and leave a ledger row explaining why.
+ */
+async function returnOrderStock(order: any, orderItems: any[], userId: string | undefined, why: string) {
+  for (const item of orderItems) {
+    const ingredients = await dbAll<any>(
+      'SELECT mii.*, i.unit_cost FROM menu_item_ingredients mii JOIN inventory_items i ON i.id = mii.inventory_item_id WHERE mii.menu_item_id = ?',
+      [item.menu_item_id]
+    );
+    for (const ing of ingredients) {
+      const qty = (Number(ing.quantity_required) || 0) * (Number(item.quantity) || 0);
+      if (qty <= 0) continue;
+      const inv = await dbGet<any>('SELECT * FROM inventory_items WHERE id = ?', [ing.inventory_item_id]);
+      if (!inv) continue;
+      const prev = Number(inv.current_quantity) || 0;
+      const next = prev + qty;
+      await dbRun('UPDATE inventory_items SET current_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [next, inv.id]);
+      const cost = Number(inv.unit_cost) || 0;
+      await dbRun(
+        `INSERT INTO inventory_transactions (id, item_id, transaction_type, quantity, previous_quantity, new_quantity, unit_cost, total_cost, reference_id, reason, user_id)
+         VALUES (?, ?, 'Returned', ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [`itx-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, inv.id, qty, prev, next, cost, qty * cost, order.order_number,
+         `${why} for Order #${order.order_number} (${item.menu_item_name} x${item.quantity})`, userId]
+      );
+    }
+  }
+}
+
 // GET /api/orders - List all orders with filters
 ordersRouter.get('/orders', authMiddleware, async (req: Request, res: Response) => {
   const { status, waiter_id, date, order_type, room_id } = req.query;
@@ -193,18 +225,29 @@ ordersRouter.post('/orders', authMiddleware, requireRoles(['admin', 'manager', '
       const disc = parseFloat(discount || 0);
       const totalAmount = Math.max(0, subtotal - disc);
 
-      // 2. Reserve inventory
+      // 2. Take the ingredients off the shelf now. The kitchen pulls stock when
+      // the ticket is raised, not when it is later marked complete, so the
+      // on-hand figure has to drop immediately. Cancelling or deleting the
+      // order hands it back (see returnOrderStock).
       for (const resv of inventoryReservations) {
-        await dbRun('UPDATE inventory_items SET reserved_quantity = reserved_quantity + ? WHERE id = ?', [
-          resv.qty,
-          resv.invId,
-        ]);
+        const inv = await dbGet<any>('SELECT * FROM inventory_items WHERE id = ?', [resv.invId]);
+        if (!inv) continue;
+        const prev = Number(inv.current_quantity) || 0;
+        const next = Math.max(0, prev - resv.qty);
+        await dbRun('UPDATE inventory_items SET current_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [next, resv.invId]);
+        const cost = Number(inv.unit_cost) || 0;
+        await dbRun(
+          `INSERT INTO inventory_transactions (id, item_id, transaction_type, quantity, previous_quantity, new_quantity, unit_cost, total_cost, reference_id, reason, user_id)
+           VALUES (?, ?, 'Consumed', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [`itx-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, resv.invId, resv.qty, prev, next, cost, resv.qty * cost, orderNumber,
+           `Consumed on order placement #${orderNumber} (${resv.invName})`, req.user?.id]
+        );
       }
 
       // 3. Create Order
       await dbRun(
         `INSERT INTO orders (id, order_number, order_type, table_number, room_id, guest_id, waiter_id, status, payment_status, subtotal, discount, total_amount, notes, stock_reserved, stock_consumed)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, 1, 0)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?, ?, ?, ?, 0, 1)`,
         [
           orderId,
           orderNumber,
@@ -291,24 +334,13 @@ ordersRouter.put('/orders/:id', authMiddleware, requireRoles(['admin', 'manager'
 
   try {
     const updatedResult = await dbTransaction(async () => {
-      // 1. First, release previously reserved stock for this order's items
+      // 1. Hand back everything the previous version of this order consumed,
+      // then take the new contents below. Editing is only allowed before the
+      // kitchen starts, so nothing has actually been cooked yet.
       const oldItems = await dbAll<any>('SELECT * FROM order_items WHERE order_id = ?', [order.id]);
-      if (order.stock_reserved === 1 && order.stock_consumed === 0) {
-        for (const oldItem of oldItems) {
-          const oldIngredients = await dbAll<any>(
-            'SELECT * FROM menu_item_ingredients WHERE menu_item_id = ?',
-            [oldItem.menu_item_id]
-          );
-          for (const ing of oldIngredients) {
-            const reservedQty = ing.quantity_required * oldItem.quantity;
-            await dbRun(
-              'UPDATE inventory_items SET reserved_quantity = GREATEST(0, reserved_quantity - ?) WHERE id = ?',
-              [reservedQty, ing.inventory_item_id]
-            );
-          }
-        }
+      if (order.stock_consumed === 1) {
+        await returnOrderStock(order, oldItems, req.user?.id, 'Returned while editing');
       }
-
       // 2. Validate all new items and check available stock
       let newSubtotal = 0;
       const newOrderItemsToInsert: any[] = [];
@@ -388,10 +420,19 @@ ordersRouter.put('/orders/:id', authMiddleware, requireRoles(['admin', 'manager'
 
       // 3. Apply new inventory reservations
       for (const resv of newInventoryReservations) {
-        await dbRun('UPDATE inventory_items SET reserved_quantity = reserved_quantity + ? WHERE id = ?', [
-          resv.qty,
-          resv.invId,
-        ]);
+        const inv = await dbGet<any>('SELECT * FROM inventory_items WHERE id = ?', [resv.invId]);
+        if (inv) {
+          const prev = Number(inv.current_quantity) || 0;
+          const next = Math.max(0, prev - resv.qty);
+          await dbRun('UPDATE inventory_items SET current_quantity = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [next, resv.invId]);
+          const cost = Number(inv.unit_cost) || 0;
+          await dbRun(
+            `INSERT INTO inventory_transactions (id, item_id, transaction_type, quantity, previous_quantity, new_quantity, unit_cost, total_cost, reference_id, reason, user_id)
+             VALUES (?, ?, 'Consumed', ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [`itx-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`, resv.invId, resv.qty, prev, next, cost, resv.qty * cost, order.order_number,
+             `Consumed on order edit #${order.order_number} (${resv.invName})`, req.user?.id]
+          );
+        }
       }
 
       // 4. Replace order items
@@ -415,7 +456,7 @@ ordersRouter.put('/orders/:id', authMiddleware, requireRoles(['admin', 'manager'
         `UPDATE orders
          SET order_type = ?, table_number = ?, room_id = ?, guest_id = ?,
              subtotal = ?, discount = ?, total_amount = ?, notes = ?, payment_status = ?,
-             stock_reserved = 1, updated_at = CURRENT_TIMESTAMP
+             stock_reserved = 0, stock_consumed = 1, updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`,
         [
           targetOrderType,
@@ -556,21 +597,11 @@ ordersRouter.put('/orders/:id/status', authMiddleware, requireRoles(['admin', 'm
     }
 
     // 2. If CANCELLED and stock was reserved: release reserved stock
-    if (status === 'Cancelled' && order.stock_reserved === 1 && order.stock_consumed === 0) {
-      for (const item of orderItems) {
-        const ingredients = await dbAll<any>(
-          'SELECT mii.* FROM menu_item_ingredients mii WHERE mii.menu_item_id = ?',
-          [item.menu_item_id]
-        );
-        for (const ing of ingredients) {
-          const reservedQty = ing.quantity_required * item.quantity;
-          await dbRun(
-            'UPDATE inventory_items SET reserved_quantity = GREATEST(0, reserved_quantity - ?) WHERE id = ?',
-            [reservedQty, ing.inventory_item_id]
-          );
-        }
-      }
-      await dbRun('UPDATE orders SET stock_reserved = 0 WHERE id = ?', [order.id]);
+    // Cancelling gives the ingredients back, since they were taken when the
+    // order was raised. stock_consumed drops to 0 so this can never run twice.
+    if (status === 'Cancelled' && order.stock_consumed === 1) {
+      await returnOrderStock(order, orderItems, req.user?.id, 'Returned on cancellation');
+      await dbRun('UPDATE orders SET stock_consumed = 0, stock_reserved = 0 WHERE id = ?', [order.id]);
     }
 
     // 3. Update order status
@@ -618,15 +649,13 @@ ordersRouter.delete('/orders/:id', authMiddleware, requireRoles(['admin']), asyn
   if (!order) return res.status(404).json({ error: 'Order not found' });
   try {
     await dbTransaction(async () => {
-      if (order.stock_reserved === 1 && order.stock_consumed === 0) {
+      // Deleting an order that never reached the customer hands the stock back.
+      // One already Served or Completed genuinely left the kitchen, so its
+      // consumption stands even though the record is being removed.
+      const wentOut = ['Served', 'Completed'].includes(order.status);
+      if (order.stock_consumed === 1 && !wentOut) {
         const items = await dbAll<any>('SELECT * FROM order_items WHERE order_id = ?', [order.id]);
-        for (const item of items) {
-          const ingredients = await dbAll<any>('SELECT * FROM menu_item_ingredients WHERE menu_item_id = ?', [item.menu_item_id]);
-          for (const ing of ingredients) {
-            const reservedQty = ing.quantity_required * item.quantity;
-            await dbRun('UPDATE inventory_items SET reserved_quantity = GREATEST(0, reserved_quantity - ?) WHERE id = ?', [reservedQty, ing.inventory_item_id]);
-          }
-        }
+        await returnOrderStock(order, items, req.user?.id, 'Returned on order deletion');
       }
       await dbRun('DELETE FROM order_items WHERE order_id = ?', [order.id]);
       await dbRun('DELETE FROM payments WHERE order_id = ?', [order.id]);
