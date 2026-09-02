@@ -268,7 +268,7 @@ inventoryRouter.post('/inventory/items', authMiddleware, requireRoles(['admin', 
 
 // PUT /api/inventory/items/:id - Edit item specifications
 inventoryRouter.put('/inventory/items/:id', authMiddleware, requireRoles(['admin', 'manager', 'chef', 'housekeeper']), async (req: Request, res: Response) => {
-  const { name, category_id, department, unit, minimum_quantity, reorder_quantity, unit_cost, supplier_id, storage_location, is_active } = req.body;
+  const { sku, name, category_id, department, unit, current_quantity, minimum_quantity, reorder_quantity, unit_cost, supplier_id, storage_location, is_active } = req.body;
   const item = await dbGet<any>('SELECT * FROM inventory_items WHERE id = ?', [req.params.id]);
   if (!item) {
     return res.status(404).json({ error: 'Item not found' });
@@ -297,13 +297,37 @@ inventoryRouter.put('/inventory/items/:id', authMiddleware, requireRoles(['admin
   };
   const nextActive = is_active === undefined || is_active === null ? (item.is_active ?? 1) : (is_active ? 1 : 0);
 
+  // SKU was accepted by the form but never written, so renaming a code looked
+  // like it saved and silently did not. It is UNIQUE, so guard the collision
+  // rather than surfacing a raw database error.
+  const nextSku = sku === undefined || sku === null || String(sku).trim() === '' ? item.sku : String(sku).trim();
+  if (nextSku !== item.sku) {
+    const clash = await dbGet<any>('SELECT id, name FROM inventory_items WHERE sku = ? AND id != ?', [nextSku, req.params.id]);
+    if (clash) {
+      return res.status(409).json({ error: `SKU "${nextSku}" is already used by "${clash.name}". Choose a different code.` });
+    }
+  }
+
+  // Quantity was also accepted and discarded. Writing it directly would move
+  // stock with no ledger entry, so a change here is recorded as an Adjustment
+  // the same way the refill screen records a Received movement.
+  const prevQty = Number(item.current_quantity) || 0;
+  const wantsQty = current_quantity !== undefined && current_quantity !== null && current_quantity !== '';
+  const nextQty = wantsQty ? keepNumber(current_quantity, prevQty) : prevQty;
+  const qtyChanged = wantsQty && nextQty !== prevQty;
+  if (qtyChanged && nextQty < 0) {
+    return res.status(400).json({ error: 'Quantity cannot be negative' });
+  }
+
   await dbRun(
-    `UPDATE inventory_items SET name = ?, category_id = ?, department = ?, unit = ?, minimum_quantity = ?, reorder_quantity = ?, unit_cost = ?, supplier_id = ?, storage_location = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+    `UPDATE inventory_items SET sku = ?, name = ?, category_id = ?, department = ?, unit = ?, current_quantity = ?, minimum_quantity = ?, reorder_quantity = ?, unit_cost = ?, supplier_id = ?, storage_location = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
     [
+      nextSku,
       name ?? item.name,
       category_id ?? item.category_id,
       department || item.department || 'General',
       unit ?? item.unit,
+      nextQty,
       keepNumber(minimum_quantity, item.minimum_quantity),
       keepNumber(reorder_quantity, item.reorder_quantity),
       keepNumber(unit_cost, item.unit_cost),
@@ -314,7 +338,30 @@ inventoryRouter.put('/inventory/items/:id', authMiddleware, requireRoles(['admin
     ]
   );
 
-  await logAudit(req.user, 'Inventory', 'Updated', req.params.id, `Updated item ${item.sku} properties`);
+  if (qtyChanged) {
+    const cost = keepNumber(unit_cost, item.unit_cost);
+    await dbRun(
+      `INSERT INTO inventory_transactions (id, item_id, transaction_type, quantity, previous_quantity, new_quantity, unit_cost, total_cost, reason, user_id)
+       VALUES (?, ?, 'Adjustment', ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        `itx-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+        req.params.id,
+        Math.abs(nextQty - prevQty),
+        prevQty,
+        nextQty,
+        cost,
+        Math.abs(nextQty - prevQty) * cost,
+        `Quantity corrected on item edit (${prevQty} -> ${nextQty})`,
+        req.user?.id,
+      ]
+    );
+  }
+
+  const changes = [
+    nextSku !== item.sku ? `sku ${item.sku} -> ${nextSku}` : null,
+    qtyChanged ? `qty ${prevQty} -> ${nextQty}` : null,
+  ].filter(Boolean).join(', ');
+  await logAudit(req.user, 'Inventory', 'Updated', req.params.id, `Updated item ${nextSku} properties${changes ? ` (${changes})` : ''}`);
   return res.json({ message: 'Inventory item updated successfully' });
 });
 
