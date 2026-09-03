@@ -24,7 +24,18 @@ import {
   Trash2
 } from 'lucide-react';
 import { formatCurrency } from '../../utils/currency';
-import { formatTimeCAT, formatDateTimeCAT } from '../../utils/dates';
+import { formatDateTimeCAT, todayCAT, daysFromTodayCAT, dateKeyCAT } from '../../utils/dates';
+
+// How the money was taken, in the words staff use.
+const PAYMENT_LABELS: Record<string, string> = {
+  'Cash': 'CASH',
+  'Mobile Money': 'MOBILE MONEY (MoMo)',
+  'Credit Card': 'CARD',
+  'Debit Card': 'CARD',
+  'Bank Transfer': 'BANK TRANSFER',
+  'Room Charge': 'CHARGED TO ROOM',
+};
+const paymentLabel = (m?: string | null) => (m ? PAYMENT_LABELS[m] || m.toUpperCase() : '');
 
 export const OrderManager: React.FC = () => {
   const { user } = useAuth();
@@ -59,6 +70,12 @@ export const OrderManager: React.FC = () => {
   const [clearingAll, setClearingAll] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<Order | null>(null);
   const [cancelling, setCancelling] = useState(false);
+
+  // Order history report
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyRange, setHistoryRange] = useState<'today' | 'yesterday' | 'week' | 'month' | 'all' | 'custom'>('today');
+  const [historyFrom, setHistoryFrom] = useState(todayCAT());
+  const [historyTo, setHistoryTo] = useState(todayCAT());
 
   // Settlement
   const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -195,6 +212,148 @@ export const OrderManager: React.FC = () => {
     }
   };
 
+  // Resolve the chosen range to inclusive date bounds. Comparing on the rendered
+  // CAT date string avoids the timezone off-by-one that raw Date maths gives for
+  // orders placed near midnight.
+  const historyBounds = (): { from: string; to: string; label: string } => {
+    const today = todayCAT();
+    switch (historyRange) {
+      case 'today':
+        return { from: today, to: today, label: `Today (${today})` };
+      case 'yesterday': {
+        const y = daysFromTodayCAT(-1);
+        return { from: y, to: y, label: `Yesterday (${y})` };
+      }
+      case 'week': {
+        const f = daysFromTodayCAT(-6);
+        return { from: f, to: today, label: `Last 7 days (${f} to ${today})` };
+      }
+      case 'month': {
+        const f = daysFromTodayCAT(-29);
+        return { from: f, to: today, label: `Last 30 days (${f} to ${today})` };
+      }
+      case 'all':
+        return { from: '0000-01-01', to: '9999-12-31', label: 'All time' };
+      default: {
+        const from = historyFrom <= historyTo ? historyFrom : historyTo;
+        const to = historyFrom <= historyTo ? historyTo : historyFrom;
+        return { from, to, label: from === to ? from : `${from} to ${to}` };
+      }
+    }
+  };
+
+  const historyOrders = (() => {
+    const { from, to } = historyBounds();
+    return orders
+      .filter((o) => {
+        const d = dateKeyCAT(o.created_at);
+        return d >= from && d <= to;
+      })
+      .slice()
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  })();
+
+  const handleOpenHistoryPdf = () => {
+    // The default CAT formatter omits the year, which is fine in a live queue
+    // but wrong on a report that can span months.
+    const stamp = (v: any) =>
+      formatDateTimeCAT(v, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const { label } = historyBounds();
+    const rows = historyOrders;
+    if (rows.length === 0) {
+      return error('Nothing to show', `No orders found for ${label}.`);
+    }
+
+    const money = (v: any) => Number(v) || 0;
+    const paidRows = rows.filter((o: any) => o.payment_status === 'Paid');
+    const takings = paidRows.reduce((sum: number, o: any) => sum + money(o.total_amount), 0);
+    const gross = rows
+      .filter((o: any) => o.status !== 'Cancelled')
+      .reduce((sum: number, o: any) => sum + money(o.total_amount), 0);
+
+    const byMethod = paidRows.reduce((acc: Record<string, { count: number; total: number }>, o: any) => {
+      const k = paymentLabel(o.payment_method) || 'NOT RECORDED';
+      acc[k] = acc[k] || { count: 0, total: 0 };
+      acc[k].count += 1;
+      acc[k].total += money(o.total_amount);
+      return acc;
+    }, {});
+
+    const esc = (v: any) =>
+      String(v ?? '').replace(/[&<>]/g, (c) => (({ '&': '&amp;', '<': '&lt;', '>': '&gt;' } as any)[c]));
+
+    const bodyRows = rows
+      .map(
+        (o: any) => `<tr>
+      <td class="mono">${esc(o.order_number)}</td>
+      <td>${esc(stamp(o.created_at))}</td>
+      <td>${esc(o.waiter_name || '')}</td>
+      <td>${esc(o.order_type)}${o.table_number ? ` #${esc(o.table_number)}` : ''}${o.room_number ? ` Room ${esc(o.room_number)}` : ''}</td>
+      <td class="small">${(o.items || []).map((i: any) => `${i.quantity}x ${esc(i.menu_item_name)}`).join('<br>') || '&mdash;'}</td>
+      <td><span class="badge ${o.status === 'Cancelled' ? 'bad' : o.status === 'Completed' ? 'good' : ''}">${esc(o.status)}</span></td>
+      <td>${o.payment_status === 'Paid' ? `<strong>${esc(paymentLabel(o.payment_method) || 'PAID')}</strong>` : `<span class="muted">${esc(o.payment_status)}</span>`}</td>
+      <td class="right mono">${esc(formatCurrency(o.total_amount))}</td>
+    </tr>`
+      )
+      .join('');
+
+    const methodRows =
+      Object.entries(byMethod)
+        .map(
+          ([k, v]: [string, { count: number; total: number }]) => `<tr><td>${esc(k)}</td><td class="right">${v.count}</td><td class="right mono">${esc(formatCurrency(v.total))}</td></tr>`
+        )
+        .join('') || '<tr><td colspan="3" class="muted">No payments recorded in this period</td></tr>';
+
+    const w = window.open('', '_blank', 'width=1100,height=800');
+    if (!w) {
+      return error('Popup blocked', 'Allow pop-ups for this site to open the order history view.');
+    }
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Order History - ${esc(label)}</title>
+<style>
+  *{box-sizing:border-box}
+  body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:24px;color:#0f172a;background:#fff;font-size:12px}
+  h1{font-size:18px;margin:0 0 2px}
+  .sub{color:#64748b;font-size:11px;margin-bottom:16px}
+  .cards{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .card{border:1px solid #e2e8f0;border-radius:8px;padding:10px 14px;min-width:150px}
+  .card .k{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#64748b}
+  .card .v{font-size:17px;font-weight:800;margin-top:2px}
+  table{width:100%;border-collapse:collapse;margin-bottom:18px}
+  th{text-align:left;background:#f1f5f9;border-bottom:2px solid #cbd5e1;padding:7px 8px;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:#475569}
+  td{border-bottom:1px solid #eef2f7;padding:7px 8px;vertical-align:top}
+  .right{text-align:right}.mono{font-family:ui-monospace,Consolas,monospace}
+  .small{font-size:11px;color:#334155}.muted{color:#94a3b8}
+  .badge{display:inline-block;padding:1px 7px;border-radius:999px;background:#e2e8f0;font-size:10px;font-weight:700}
+  .badge.good{background:#d1fae5;color:#065f46}.badge.bad{background:#fee2e2;color:#991b1b}
+  h2{font-size:13px;margin:18px 0 6px}
+  .foot{margin-top:18px;border-top:1px solid #e2e8f0;padding-top:8px;color:#94a3b8;font-size:10px}
+  .actions{margin-bottom:14px}
+  button{padding:7px 14px;font-size:12px;font-weight:700;border:1px solid #cbd5e1;border-radius:6px;background:#0f172a;color:#fff;cursor:pointer}
+  @media print{.actions{display:none}body{padding:0}}
+</style></head><body>
+<div class="actions"><button onclick="window.print()">Print / Save as PDF</button></div>
+<h1>${esc(getSetting('site_title', 'Grand Horizon Motel & Bistro'))} &mdash; Order History</h1>
+<div class="sub">${esc(label)} &bull; ${rows.length} order(s) &bull; generated ${esc(stamp(new Date().toISOString()))}</div>
+<div class="cards">
+  <div class="card"><div class="k">Orders</div><div class="v">${rows.length}</div></div>
+  <div class="card"><div class="k">Paid</div><div class="v">${paidRows.length}</div></div>
+  <div class="card"><div class="k">Takings (paid)</div><div class="v">${esc(formatCurrency(takings))}</div></div>
+  <div class="card"><div class="k">Order value (excl. cancelled)</div><div class="v">${esc(formatCurrency(gross))}</div></div>
+</div>
+<table>
+  <thead><tr><th>Order</th><th>Date &amp; time</th><th>Raised by</th><th>Type</th><th>Items</th><th>Status</th><th>Payment</th><th class="right">Total</th></tr></thead>
+  <tbody>${bodyRows}</tbody>
+</table>
+<h2>Takings by payment method</h2>
+<table>
+  <thead><tr><th>Method</th><th class="right">Orders</th><th class="right">Amount</th></tr></thead>
+  <tbody>${methodRows}</tbody>
+</table>
+<div class="foot">${esc(getSetting('site_location', 'Kigali, Rwanda'))} &bull; Cancelled orders are listed for the audit trail and excluded from order value.</div>
+</body></html>`);
+    w.document.close();
+  };
+
   const handleDownloadBill = () => {
     const receipt = document.getElementById('printable-receipt');
     if (!receipt) return;
@@ -298,6 +457,13 @@ export const OrderManager: React.FC = () => {
             className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 transition-colors"
           >
             <RefreshCw className="w-3.5 h-3.5" /> Refresh
+          </button>
+          <button
+            onClick={() => setShowHistoryModal(true)}
+            className="px-3.5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow flex items-center gap-1.5 transition-colors"
+            title="Open the order history as a printable page"
+          >
+            <Printer className="w-3.5 h-3.5" /> History PDF
           </button>
           {user?.role === 'admin' && (
             <button
@@ -419,6 +585,11 @@ export const OrderManager: React.FC = () => {
                     }`}
                   >
                     {ord.payment_status}
+                    {ord.payment_status === 'Paid' && (ord as any).payment_method && (
+                      <span className="ml-1 text-[10px] font-bold text-slate-400">
+                        &bull; {paymentLabel((ord as any).payment_method)}
+                      </span>
+                    )}
                   </span>
                 </div>
               </div>
@@ -708,6 +879,22 @@ export const OrderManager: React.FC = () => {
                     {selectedReceiptOrder.payment_status === 'Paid' ? '✓ PAID' : 'UNPAID'}
                   </span>
                 </div>
+                {selectedReceiptOrder.payment_status === 'Paid' && (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-500">Paid By</span>
+                      <span className="font-bold text-gray-900">
+                        {paymentLabel((selectedReceiptOrder as any).payment_method) || 'NOT RECORDED'}
+                      </span>
+                    </div>
+                    {(selectedReceiptOrder as any).receipt_number && (
+                      <div className="flex justify-between">
+                        <span className="text-gray-500">Receipt No.</span>
+                        <span className="font-mono font-bold text-gray-900">{(selectedReceiptOrder as any).receipt_number}</span>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
 
               {/* Items Table */}
@@ -924,6 +1111,103 @@ export const OrderManager: React.FC = () => {
               >
                 <XCircle className="w-3.5 h-3.5" />
                 {cancelling ? 'Cancelling...' : 'Cancel Order'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Order history report — pick a period, open a printable page */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <Printer className="w-5 h-5 text-sky-400" /> Order History
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              Opens a printable page listing every order in the period with who raised it, its status and how it was paid.
+              Use your browser&apos;s Print dialog to save it as PDF.
+            </p>
+
+            <div className="mt-4">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Period</label>
+              <div className="grid grid-cols-3 gap-1.5">
+                {([
+                  ['today', 'Today'],
+                  ['yesterday', 'Yesterday'],
+                  ['week', 'Last 7 days'],
+                  ['month', 'Last 30 days'],
+                  ['all', 'All time'],
+                  ['custom', 'Custom'],
+                ] as const).map(([id, lbl]) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setHistoryRange(id)}
+                    className={`px-2 py-2 rounded-xl text-[11px] font-bold transition-colors ${
+                      historyRange === id
+                        ? 'bg-sky-600 text-white'
+                        : 'bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700'
+                    }`}
+                  >
+                    {lbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {historyRange === 'custom' && (
+              <div className="grid grid-cols-2 gap-3 mt-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">From</label>
+                  <input
+                    type="date"
+                    value={historyFrom}
+                    max={todayCAT()}
+                    onChange={(e) => setHistoryFrom(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">To</label>
+                  <input
+                    type="date"
+                    value={historyTo}
+                    max={todayCAT()}
+                    onChange={(e) => setHistoryTo(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 p-3 rounded-xl bg-slate-950/60 border border-slate-800">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">{historyBounds().label}</span>
+                <span className={`font-bold ${historyOrders.length === 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {historyOrders.length} order{historyOrders.length === 1 ? '' : 's'}
+                </span>
+              </div>
+              {historyOrders.length === 0 && (
+                <p className="text-[10px] text-amber-300/80 mt-1">Nothing was ordered in this period — pick another.</p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowHistoryModal(false)}
+                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white"
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenHistoryPdf}
+                disabled={historyOrders.length === 0}
+                className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              >
+                <Printer className="w-3.5 h-3.5" /> Open PDF View
               </button>
             </div>
           </div>

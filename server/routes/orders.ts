@@ -42,7 +42,10 @@ ordersRouter.get('/orders', authMiddleware, async (req: Request, res: Response) 
 
   let query = `
     SELECT o.*, u.full_name as waiter_name, u.username as waiter_username,
-           r.room_number, g.full_name as guest_name
+           r.room_number, g.full_name as guest_name,
+           (SELECT p.payment_method FROM payments p WHERE p.order_id = o.id ORDER BY p.payment_date DESC LIMIT 1) as payment_method,
+           (SELECT p.receipt_number FROM payments p WHERE p.order_id = o.id ORDER BY p.payment_date DESC LIMIT 1) as receipt_number,
+           (SELECT p.payment_date FROM payments p WHERE p.order_id = o.id ORDER BY p.payment_date DESC LIMIT 1) as paid_at
     FROM orders o
     JOIN users u ON o.waiter_id = u.id
     LEFT JOIN rooms r ON o.room_id = r.id
@@ -100,7 +103,10 @@ ordersRouter.get('/orders', authMiddleware, async (req: Request, res: Response) 
 // GET /api/orders/:id
 ordersRouter.get('/orders/:id', authMiddleware, async (req: Request, res: Response) => {
   const order = await dbGet<any>(
-    `SELECT o.*, u.full_name as waiter_name, r.room_number, g.full_name as guest_name
+    `SELECT o.*, u.full_name as waiter_name, r.room_number, g.full_name as guest_name,
+            (SELECT p.payment_method FROM payments p WHERE p.order_id = o.id ORDER BY p.payment_date DESC LIMIT 1) as payment_method,
+            (SELECT p.receipt_number FROM payments p WHERE p.order_id = o.id ORDER BY p.payment_date DESC LIMIT 1) as receipt_number,
+            (SELECT p.payment_date FROM payments p WHERE p.order_id = o.id ORDER BY p.payment_date DESC LIMIT 1) as paid_at
      FROM orders o
      JOIN users u ON o.waiter_id = u.id
      LEFT JOIN rooms r ON o.room_id = r.id

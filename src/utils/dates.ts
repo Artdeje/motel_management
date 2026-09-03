@@ -11,6 +11,24 @@ export function todayCAT(): string {
   return `${get('year')}-${get('month')}-${get('day')}`;
 }
 
+/**
+ * The calendar date of a timestamp, as rendered in CAT (YYYY-MM-DD).
+ * Report filters compare on this rather than raw Date maths so an order placed
+ * late at night lands on the day staff actually worked it.
+ */
+export function dateKeyCAT(value: string | number | Date): string {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
 export function daysFromTodayCAT(days: number): string {
   const parts = new Intl.DateTimeFormat('en-GB', {
     timeZone: TIME_ZONE,
