@@ -310,10 +310,20 @@ ordersRouter.put('/orders/:id', authMiddleware, requireRoles(['admin', 'manager'
     return res.status(403).json({ error: 'You can only edit your own orders' });
   }
 
-  // Strict check: Orders can ONLY be edited before cooking starts ('Pending' or 'Confirmed')
-  if (!['Pending', 'Confirmed'].includes(order.status)) {
+  // An order stays editable through every step until it is settled. Payment is
+  // the line: once money has changed hands the contents are fixed, because the
+  // receipt and the takings would no longer agree with the order.
+  if (['Paid', 'ChargedToRoom'].includes(order.payment_status)) {
     return res.status(400).json({
-      error: `Order #${order.order_number} cannot be edited because kitchen preparation has already started (Current status: ${order.status}). Orders can only be modified before cooking begins.`
+      error: `Order #${order.order_number} has already been paid and can no longer be changed. Cancel it and raise a new order if the contents were wrong.`
+    });
+  }
+
+  // A cancelled order has already handed its stock back; editing it would
+  // consume stock again for an order nobody is preparing.
+  if (order.status === 'Cancelled') {
+    return res.status(400).json({
+      error: `Order #${order.order_number} was cancelled and can no longer be edited. Raise a new order instead.`
     });
   }
 
