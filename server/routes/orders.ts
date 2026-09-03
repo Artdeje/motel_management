@@ -85,6 +85,26 @@ ordersRouter.get('/orders', authMiddleware, async (req: Request, res: Response) 
 
   const orders = await dbAll<any>(query, params);
 
+  // A bill can be settled with more than one method, so the single
+  // payment_method column above is not the whole story. Pull every payment for
+  // the listed orders in one query — a per-order query would be N+1 across a
+  // few hundred rows — and attach them so the bill can show the full split.
+  const paymentsByOrder = new Map<string, any[]>();
+  if (orders.length > 0) {
+    const ids = orders.map((o) => o.id);
+    const placeholders = ids.map(() => '?').join(', ');
+    const payRows = await dbAll<any>(
+      `SELECT order_id, receipt_number, amount, payment_method, payment_date
+       FROM payments WHERE order_id IN (${placeholders}) ORDER BY payment_date ASC`,
+      ids
+    );
+    for (const r of payRows) {
+      const list = paymentsByOrder.get(r.order_id) || [];
+      list.push({ ...r, amount: Number(r.amount) || 0 });
+      paymentsByOrder.set(r.order_id, list);
+    }
+  }
+
   const enriched = await Promise.all(orders.map(async (ord) => {
     const items = await dbAll<any>(
       `SELECT oi.*, m.category_id, mc.name as category_name
@@ -94,7 +114,8 @@ ordersRouter.get('/orders', authMiddleware, async (req: Request, res: Response) 
        WHERE oi.order_id = ?`,
       [ord.id]
     );
-    return { ...ord, items };
+    const payments = paymentsByOrder.get(ord.id) || [];
+    return { ...ord, items, payments, is_split_payment: payments.length > 1 };
   }));
 
   return res.json({ orders: enriched });
@@ -687,7 +708,7 @@ ordersRouter.delete('/orders/:id', authMiddleware, requireRoles(['admin']), asyn
 
 // POST /api/orders/:id/pay - Record payment for order directly
 ordersRouter.post('/orders/:id/pay', authMiddleware, requireRoles(['admin', 'manager', 'bartender']), async (req: Request, res: Response) => {
-  const { payment_method } = req.body;
+  const { payment_method, payments } = req.body;
   const order = await dbGet<any>('SELECT * FROM orders WHERE id = ?', [req.params.id]);
   if (!order) {
     return res.status(404).json({ error: 'Order not found' });
@@ -702,19 +723,70 @@ ordersRouter.post('/orders/:id/pay', authMiddleware, requireRoles(['admin', 'man
     return res.status(400).json({ error: `Order #${order.order_number} is already paid` });
   }
 
-  const payId = `pay-${Date.now()}`;
+  // A bill can be settled with more than one method — part cash, part MoMo.
+  // `payments: [{ method, amount }, ...]` records a row per method; a bare
+  // `payment_method` still settles the whole bill in one, as before.
+  const total = Number(order.total_amount) || 0;
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+
+  let splits: { method: string; amount: number }[];
+  if (Array.isArray(payments) && payments.length > 0) {
+    splits = payments.map((p: any) => ({
+      method: String(p?.method || p?.payment_method || '').trim(),
+      amount: Number(p?.amount),
+    }));
+
+    if (splits.some((p) => !p.method)) {
+      return res.status(400).json({ error: 'Every split needs a payment method' });
+    }
+    if (splits.some((p) => !Number.isFinite(p.amount) || p.amount <= 0)) {
+      return res.status(400).json({ error: 'Every split needs an amount greater than zero' });
+    }
+    if (new Set(splits.map((p) => p.method)).size !== splits.length) {
+      return res.status(400).json({ error: 'Use a different method for each split' });
+    }
+
+    // Tolerate rounding to the cent, but never let the parts disagree with the bill.
+    const sum = round2(splits.reduce((acc, p) => acc + p.amount, 0));
+    if (Math.abs(sum - round2(total)) > 0.01) {
+      return res.status(400).json({
+        error: `Split amounts come to ${sum} but the bill is ${round2(total)}. They must match exactly.`,
+      });
+    }
+  } else {
+    splits = [{ method: payment_method || 'Cash', amount: total }];
+  }
+
   const recNumber = `RCT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const payIds: string[] = [];
 
   await dbTransaction(async () => {
     await dbRun('UPDATE orders SET payment_status = "Paid", updated_at = CURRENT_TIMESTAMP WHERE id = ?', [order.id]);
 
-    await dbRun(
-      `INSERT INTO payments (id, receipt_number, order_id, guest_id, amount, payment_method, payment_category, received_by, notes)
-       VALUES (?, ?, ?, ?, ?, ?, 'Food/Drinks', ?, 'Direct restaurant/bar order payment')`,
-      [payId, recNumber, order.id, order.guest_id, order.total_amount, payment_method || 'Cash', req.user?.id]
-    );
+    // One row per method so finance reports break down correctly. receipt_number
+    // is UNIQUE, so the parts of a split cannot share one — each gets the bill's
+    // number with a part suffix, which still reads as one receipt.
+    for (let i = 0; i < splits.length; i++) {
+      const sp = splits[i];
+      const payId = `pay-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+      payIds.push(payId);
+      const rowReceipt = splits.length > 1 ? `${recNumber}-${i + 1}` : recNumber;
+      await dbRun(
+        `INSERT INTO payments (id, receipt_number, order_id, guest_id, amount, payment_method, payment_category, received_by, notes)
+         VALUES (?, ?, ?, ?, ?, ?, 'Food/Drinks', ?, ?)`,
+        [payId, rowReceipt, order.id, order.guest_id, sp.amount, sp.method, req.user?.id,
+         splits.length > 1
+           ? `Split payment ${i + 1}/${splits.length} for order #${order.order_number} (receipt ${recNumber})`
+           : 'Direct restaurant/bar order payment']
+      );
+    }
   });
 
-  logAudit(req.user, 'Finance', 'Payment Received', payId, `Received $${order.total_amount} payment for order #${order.order_number} via ${payment_method || 'Cash'}`);
-  return res.json({ message: 'Payment recorded successfully', receipt_number: recNumber });
+  const summary = splits.map((p) => `${p.method} ${p.amount}`).join(' + ');
+  logAudit(req.user, 'Finance', 'Payment Received', payIds[0], `Received ${round2(total)} for order #${order.order_number} via ${summary}`);
+  return res.json({
+    message: splits.length > 1 ? `Split payment recorded (${summary})` : 'Payment recorded successfully',
+    receipt_number: recNumber,
+    splits,
+  });
 });

@@ -77,6 +77,14 @@ export const OrderManager: React.FC = () => {
   const [historyFrom, setHistoryFrom] = useState(todayCAT());
   const [historyTo, setHistoryTo] = useState(todayCAT());
 
+  // Take payment (single or split across two methods)
+  const [payTarget, setPayTarget] = useState<Order | null>(null);
+  const [paySplit, setPaySplit] = useState(false);
+  const [payMethodA, setPayMethodA] = useState('Cash');
+  const [payMethodB, setPayMethodB] = useState('Mobile Money');
+  const [payAmountA, setPayAmountA] = useState('');
+  const [payingNow, setPayingNow] = useState(false);
+
   // Settlement
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [submittingPayment, setSubmittingPayment] = useState(false);
@@ -169,6 +177,47 @@ export const OrderManager: React.FC = () => {
       error('Cancel failed', err.message);
     } finally {
       setCancelling(false);
+    }
+  };
+
+  const openPayModal = (ord: Order) => {
+    setPayTarget(ord);
+    setPaySplit(false);
+    setPayMethodA('Cash');
+    setPayMethodB('Mobile Money');
+    setPayAmountA('');
+  };
+
+  // With a split, the first method takes the typed amount and the second takes
+  // whatever is left, so the two can never disagree with the bill.
+  const payTotal = Number(payTarget?.total_amount) || 0;
+  const payA = Math.min(Math.max(parseFloat(payAmountA || '0') || 0, 0), payTotal);
+  const payB = Math.round((payTotal - payA) * 100) / 100;
+
+  const handleTakePayment = async () => {
+    if (!payTarget) return;
+    if (paySplit) {
+      if (payMethodA === payMethodB) return error('Pick two different methods', 'A split needs two distinct payment methods.');
+      if (payA <= 0 || payB <= 0) return error('Both parts must be more than zero', `Enter an amount between 1 and ${formatCurrency(payTotal - 1)}.`);
+    }
+
+    setPayingNow(true);
+    try {
+      const body = paySplit
+        ? { payments: [{ method: payMethodA, amount: payA }, { method: payMethodB, amount: payB }] }
+        : { payment_method: payMethodA, payment_status: 'Paid' };
+
+      const res: any = await api.processOrderPayment(payTarget.id, body);
+      try {
+        await api.updateOrderStatus(payTarget.id, 'Completed');
+      } catch (_) {}
+      success('Payment received', res?.message || `#${payTarget.order_number} settled`);
+      setPayTarget(null);
+      fetchOrders();
+    } catch (err: any) {
+      error('Payment failed', err.message);
+    } finally {
+      setPayingNow(false);
     }
   };
 
@@ -271,11 +320,18 @@ export const OrderManager: React.FC = () => {
       .filter((o: any) => o.status !== 'Cancelled')
       .reduce((sum: number, o: any) => sum + money(o.total_amount), 0);
 
+    // Count each leg of a split under its own method so the breakdown adds up
+    // to takings rather than attributing a whole split bill to one method.
     const byMethod = paidRows.reduce((acc: Record<string, { count: number; total: number }>, o: any) => {
-      const k = paymentLabel(o.payment_method) || 'NOT RECORDED';
-      acc[k] = acc[k] || { count: 0, total: 0 };
-      acc[k].count += 1;
-      acc[k].total += money(o.total_amount);
+      const legs = (o.payments || []).length > 0
+        ? (o.payments as any[]).map((pp: any) => ({ m: pp.payment_method, a: money(pp.amount) }))
+        : [{ m: o.payment_method, a: money(o.total_amount) }];
+      for (const leg of legs) {
+        const k = paymentLabel(leg.m) || 'NOT RECORDED';
+        acc[k] = acc[k] || { count: 0, total: 0 };
+        acc[k].count += 1;
+        acc[k].total += leg.a;
+      }
       return acc;
     }, {});
 
@@ -291,7 +347,11 @@ export const OrderManager: React.FC = () => {
       <td>${esc(o.order_type)}${o.table_number ? ` #${esc(o.table_number)}` : ''}${o.room_number ? ` Room ${esc(o.room_number)}` : ''}</td>
       <td class="small">${(o.items || []).map((i: any) => `${i.quantity}x ${esc(i.menu_item_name)}`).join('<br>') || '&mdash;'}</td>
       <td><span class="badge ${o.status === 'Cancelled' ? 'bad' : o.status === 'Completed' ? 'good' : ''}">${esc(o.status)}</span></td>
-      <td>${o.payment_status === 'Paid' ? `<strong>${esc(paymentLabel(o.payment_method) || 'PAID')}</strong>` : `<span class="muted">${esc(o.payment_status)}</span>`}</td>
+      <td>${o.payment_status === 'Paid'
+        ? ((o.payments || []).length > 1
+            ? `<strong>SPLIT</strong><br><span class="small">${(o.payments as any[]).map((pp: any) => `${esc(paymentLabel(pp.payment_method))} ${esc(formatCurrency(pp.amount))}`).join('<br>')}</span>`
+            : `<strong>${esc(paymentLabel(o.payment_method) || 'PAID')}</strong>`)
+        : `<span class="muted">${esc(o.payment_status)}</span>`}</td>
       <td class="right mono">${esc(formatCurrency(o.total_amount))}</td>
     </tr>`
       )
@@ -451,7 +511,7 @@ export const OrderManager: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex items-center gap-2 flex-wrap self-stretch sm:self-auto">
           <button
             onClick={fetchOrders}
             className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 flex items-center gap-1.5 transition-colors"
@@ -587,7 +647,9 @@ export const OrderManager: React.FC = () => {
                     {ord.payment_status}
                     {ord.payment_status === 'Paid' && (ord as any).payment_method && (
                       <span className="ml-1 text-[10px] font-bold text-slate-400">
-                        &bull; {paymentLabel((ord as any).payment_method)}
+                        &bull; {((ord as any).payments || []).length > 1
+                          ? ((ord as any).payments as any[]).map((pp) => paymentLabel(pp.payment_method)).join(' + ')
+                          : paymentLabel((ord as any).payment_method)}
                       </span>
                     )}
                   </span>
@@ -595,7 +657,7 @@ export const OrderManager: React.FC = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+              <div className="pt-3 border-t border-slate-800 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <button
                     onClick={() => setSelectedReceiptOrder(ord)}
@@ -683,43 +745,14 @@ export const OrderManager: React.FC = () => {
                     </button>
                   )}
 
-                  {/* Served + unpaid → combined Pay & Complete */}
+                  {/* Served + unpaid -> open the payment dialog */}
                   {canConfirmPayment && isServed && ord.payment_status !== 'Paid' && (
-                    confirmPayOrderId === ord.id ? (
-                      <div className="flex items-center gap-1.5 ml-auto">
-                        <select
-                          value={confirmPayMethod}
-                          onChange={(e) => setConfirmPayMethod(e.target.value)}
-                          className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-[10px] text-white"
-                        >
-                          <option value="Cash">Cash</option>
-                          <option value="Credit Card">Credit Card</option>
-                          <option value="Mobile Money">Mobile Money</option>
-                          <option value="Room Charge">Room Charge</option>
-                        </select>
-                        <button
-                          onClick={() => handleQuickPayAndComplete(ord.id)}
-                          disabled={submittingQuickPay}
-                          className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow transition-transform active:scale-95 disabled:opacity-50 flex items-center gap-1"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          {submittingQuickPay ? 'Processing...' : 'Pay & Complete'}
-                        </button>
-                        <button
-                          onClick={() => setConfirmPayOrderId(null)}
-                          className="px-1.5 py-1 text-slate-400 hover:text-white"
-                        >
-                          <XCircle className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => { setConfirmPayOrderId(ord.id); setConfirmPayMethod('Cash'); }}
-                        className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 ml-auto"
-                      >
-                        <CreditCard className="w-4 h-4" /> Pay & Complete
-                      </button>
-                    )
+                    <button
+                      onClick={() => openPayModal(ord)}
+                      className="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 ml-auto"
+                    >
+                      <CreditCard className="w-4 h-4" /> Take Payment
+                    </button>
                   )}
 
                   {/* Served + already paid → just complete */}
@@ -805,12 +838,10 @@ export const OrderManager: React.FC = () => {
               </button>
               {canConfirmPayment && selectedReceiptOrder.payment_status !== 'Paid' && (
                 <button
-                  onClick={() => handleSettlePayment(selectedReceiptOrder.id)}
-                  disabled={submittingPayment}
-                  className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow transition-transform active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
+                  onClick={() => openPayModal(selectedReceiptOrder)}
+                  className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow transition-transform active:scale-95 flex items-center gap-1.5"
                 >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  {submittingPayment ? 'Processing...' : 'Pay & Complete'}
+                  <CreditCard className="w-3.5 h-3.5" /> Take Payment
                 </button>
               )}
               <button
@@ -879,22 +910,45 @@ export const OrderManager: React.FC = () => {
                     {selectedReceiptOrder.payment_status === 'Paid' ? '✓ PAID' : 'UNPAID'}
                   </span>
                 </div>
-                {selectedReceiptOrder.payment_status === 'Paid' && (
-                  <>
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Paid By</span>
-                      <span className="font-bold text-gray-900">
-                        {paymentLabel((selectedReceiptOrder as any).payment_method) || 'NOT RECORDED'}
-                      </span>
-                    </div>
-                    {(selectedReceiptOrder as any).receipt_number && (
+                {selectedReceiptOrder.payment_status === 'Paid' && (() => {
+                  const pays = ((selectedReceiptOrder as any).payments || []) as any[];
+                  if (pays.length > 1) {
+                    return (
+                      <>
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Paid By</span>
+                          <span className="font-bold text-gray-900">SPLIT ({pays.length} methods)</span>
+                        </div>
+                        {pays.map((pay, i) => (
+                          <div key={i} className="flex justify-between">
+                            <span className="text-gray-500 pl-3">&bull; {paymentLabel(pay.payment_method)}</span>
+                            <span className="font-mono font-bold text-gray-900">{formatCurrency(pay.amount)}</span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Receipt No.</span>
+                          <span className="font-mono font-bold text-gray-900">{pays[0]?.receipt_number}</span>
+                        </div>
+                      </>
+                    );
+                  }
+                  return (
+                    <>
                       <div className="flex justify-between">
-                        <span className="text-gray-500">Receipt No.</span>
-                        <span className="font-mono font-bold text-gray-900">{(selectedReceiptOrder as any).receipt_number}</span>
+                        <span className="text-gray-500">Paid By</span>
+                        <span className="font-bold text-gray-900">
+                          {paymentLabel((selectedReceiptOrder as any).payment_method) || 'NOT RECORDED'}
+                        </span>
                       </div>
-                    )}
-                  </>
-                )}
+                      {(selectedReceiptOrder as any).receipt_number && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-500">Receipt No.</span>
+                          <span className="font-mono font-bold text-gray-900">{(selectedReceiptOrder as any).receipt_number}</span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
 
               {/* Items Table */}
@@ -1007,8 +1061,8 @@ export const OrderManager: React.FC = () => {
 
       {/* Empty All Order History — admin only, typed confirmation */}
       {showClearAllModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-rose-500/40 rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Trash2 className="w-5 h-5 text-rose-400" /> Empty All Order History
             </h3>
@@ -1068,8 +1122,8 @@ export const OrderManager: React.FC = () => {
 
       {/* Cancel order — voids it and hands the ingredients back */}
       {cancelTarget && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-rose-500/40 rounded-2xl max-w-sm w-full p-6 shadow-2xl">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-sm p-5 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <XCircle className="w-5 h-5 text-rose-400" /> Cancel Order #{cancelTarget.order_number}
             </h3>
@@ -1119,8 +1173,8 @@ export const OrderManager: React.FC = () => {
 
       {/* Order history report — pick a period, open a printable page */}
       {showHistoryModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
             <h3 className="text-base font-bold text-white flex items-center gap-2">
               <Printer className="w-5 h-5 text-sky-400" /> Order History
             </h3>
@@ -1208,6 +1262,154 @@ export const OrderManager: React.FC = () => {
                 className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs rounded-xl shadow disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
               >
                 <Printer className="w-3.5 h-3.5" /> Open PDF View
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Take payment — one method, or split across two */}
+      {payTarget && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md p-5 sm:p-6 shadow-2xl max-h-[92vh] overflow-y-auto">
+            <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <CreditCard className="w-5 h-5 text-emerald-400" /> Take Payment
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              #{payTarget.order_number} &bull; {payTarget.waiter_name}
+            </p>
+
+            <div className="mt-4 p-3 rounded-xl bg-slate-950/60 border border-slate-800 flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Amount due</span>
+              <span className="text-xl font-black font-mono text-white">{formatCurrency(payTotal)}</span>
+            </div>
+
+            <label className="flex items-center gap-2.5 mt-4 p-3 rounded-xl bg-slate-800/50 border border-slate-700/60 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={paySplit}
+                onChange={(e) => {
+                  setPaySplit(e.target.checked);
+                  if (e.target.checked && !payAmountA) setPayAmountA(String(Math.round(payTotal / 2)));
+                }}
+                className="accent-emerald-500 w-4 h-4 shrink-0"
+              />
+              <span className="text-xs font-semibold text-white">
+                Split across two payment methods
+                <span className="block text-[10px] font-normal text-slate-400 mt-0.5">
+                  For example part cash, part MoMo.
+                </span>
+              </span>
+            </label>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  {paySplit ? 'First method' : 'Payment method'}
+                </label>
+                <select
+                  value={payMethodA}
+                  onChange={(e) => setPayMethodA(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white"
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="Mobile Money">Mobile Money (MoMo)</option>
+                  <option value="Credit Card">Card</option>
+                  <option value="Bank Transfer">Bank Transfer</option>
+                  <option value="Room Charge">Charge to Room</option>
+                </select>
+              </div>
+
+              {paySplit && (
+                <>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Amount on {paymentLabel(payMethodA)}
+                    </label>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      min="1"
+                      max={payTotal}
+                      step="1"
+                      value={payAmountA}
+                      onChange={(e) => setPayAmountA(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm font-mono text-white"
+                    />
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      {[0.25, 0.5, 0.75].map((f) => (
+                        <button
+                          key={f}
+                          type="button"
+                          onClick={() => setPayAmountA(String(Math.round(payTotal * f)))}
+                          className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700 hover:bg-slate-700"
+                        >
+                          {f * 100}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">Second method</label>
+                    <select
+                      value={payMethodB}
+                      onChange={(e) => setPayMethodB(e.target.value)}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white"
+                    >
+                      <option value="Cash">Cash</option>
+                      <option value="Mobile Money">Mobile Money (MoMo)</option>
+                      <option value="Credit Card">Card</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Room Charge">Charge to Room</option>
+                    </select>
+                  </div>
+
+                  {/* The remainder is computed, never typed, so the two parts
+                      always add up to the bill exactly. */}
+                  <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 space-y-1.5">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">{paymentLabel(payMethodA)}</span>
+                      <span className="font-mono font-bold text-white">{formatCurrency(payA)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">{paymentLabel(payMethodB)} <span className="text-slate-500">(remainder)</span></span>
+                      <span className="font-mono font-bold text-white">{formatCurrency(payB)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-800">
+                      <span className="font-bold text-slate-300">Total</span>
+                      <span className={`font-mono font-black ${Math.abs(payA + payB - payTotal) < 0.01 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {formatCurrency(payA + payB)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {payMethodA === payMethodB && (
+                    <p className="text-[11px] text-rose-300 font-semibold">Choose two different methods for a split.</p>
+                  )}
+                  {(payA <= 0 || payB <= 0) && (
+                    <p className="text-[11px] text-rose-300 font-semibold">Each part must be more than zero.</p>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 sm:gap-3 pt-4 mt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setPayTarget(null)}
+                className="w-full sm:w-auto px-4 py-2.5 sm:py-2 text-xs font-semibold text-slate-400 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleTakePayment}
+                disabled={payingNow || (paySplit && (payMethodA === payMethodB || payA <= 0 || payB <= 0))}
+                className="w-full sm:w-auto px-5 py-2.5 sm:py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                {payingNow ? 'Processing...' : `Confirm ${formatCurrency(payTotal)}`}
               </button>
             </div>
           </div>
